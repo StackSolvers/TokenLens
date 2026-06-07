@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TokenLens</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <button class="logo brand-trigger" id="stacksolvers-info-btn" type="button" aria-haspopup="dialog" aria-controls="stacksolvers-modal">
+                <img class="logo-icon" src="StackSolvers.png" alt="Stack Solvers for IT Solutions">
+                <span class="logo-title">TokenLens</span>
+                <span class="brand-subtitle">by Stack Solvers for IT Solutions</span>
+            </button>
+            <nav class="nav-menu">
+                <a href="#" class="nav-item active" data-view="dashboard">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>
+                    Dashboard
+                </a>
+                <a href="#" class="nav-item" data-view="projects">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                    Projects
+                </a>
+                <a href="#" class="nav-item" data-view="agents">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"></path><rect width="16" height="12" x="4" y="8" rx="2"></rect><path d="M2 14h2"></path><path d="M20 14h2"></path><path d="M15 13v2"></path><path d="M9 13v2"></path></svg>
+                    Agents
+                </a>
+                <a href="#" class="nav-item" data-view="chats">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a4 4 0 0 1-4 4H7l-4 4V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path></svg>
+                    Chats
+                </a>
+                <a href="#" class="nav-item" data-view="settings">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                    Settings
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="status-indicator">
+                    <span class="dot active"></span>
+                    <span id="connection-status">Connected</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="top-header">
+                <div class="search-bar">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                    <input type="text" id="global-search" placeholder="Search sessions, projects...">
+                </div>
+                <div class="header-actions">
+                    <div class="quick-filters">
+                        <button class="quick-filter-btn" data-range="today">Today</button>
+                        <button class="quick-filter-btn" data-range="yesterday">Yesterday</button>
+                        <button class="quick-filter-btn" data-range="week">This Week</button>
+                        <button class="quick-filter-btn" data-range="month">This Month</button>
+                        <button class="quick-filter-btn active" data-range="all">All Time</button>
+                    </div>
+                    <div class="date-filter">
+                        <input type="date" id="date-from" title="Start Date">
+                        <span>to</span>
+                        <input type="date" id="date-to" title="End Date">
+                    </div>
+                    <select id="project-filter" class="styled-select">
+                        <option value="">All Projects</option>
+                    </select>
+                    <select id="agent-filter" class="styled-select">
+                        <option value="">All Agents</option>
+                    </select>
+                </div>
+            </header>
+
+            <div id="loading-overlay" class="loading-overlay" aria-live="polite">
+                <div class="loading-panel">
+                    <div class="loading-mark">
+                        <img src="StackSolvers.png" alt="">
+                        <span class="loading-ring"></span>
+                    </div>
+                    <div class="loading-copy">
+                        <strong>Loading TokenLens</strong>
+                        <span id="loading-message">Scanning local agent usage...</span>
+                    </div>
+                    <div class="loading-bars" aria-hidden="true">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </div>
+                </div>
+            </div>
+
+            <div id="error-banner" class="alert-banner hidden">
+                <div class="alert-icon">!</div>
+                <div class="alert-content">
+                    <h4 id="error-title">Directory Not Found</h4>
+                    <p id="error-message">Could not automatically detect Antigravity directory.</p>
+                </div>
+                <button id="resolve-error-btn" class="btn primary-btn">Fix Issue</button>
+            </div>
+
+            <!-- Dashboard View -->
+            <div class="view-section active" id="view-dashboard">
+                
+                <!-- Rolling Usage Section -->
+                <div class="glass-card" style="margin-bottom: 24px;">
+                    <div class="card-header">
+                        <h2>Rolling Token Usage</h2>
+                        <span style="font-size: 12px; color: var(--text-secondary);">Local usage windows, no cap</span>
+                    </div>
+                    <div class="usage-window-grid">
+                        <div class="usage-window-item">
+                            <div class="usage-window-header">
+                                <span>Last 5 Hours</span>
+                                <span id="usage-5hr-text">...</span>
+                            </div>
+                            <div class="progress-bar-container">
+                                <div class="progress-bar" id="usage-5hr-bar" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <div class="usage-window-item">
+                            <div class="usage-window-header">
+                                <span>Last 24 Hours</span>
+                                <span id="usage-24hr-text">...</span>
+                            </div>
+                            <div class="progress-bar-container">
+                                <div class="progress-bar" id="usage-24hr-bar" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <div class="usage-window-item">
+                            <div class="usage-window-header">
+                                <span>Last 7 Days</span>
+                                <span id="usage-week-text">...</span>
+                            </div>
+                            <div class="progress-bar-container">
+                                <div class="progress-bar" id="usage-week-bar" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <div class="usage-window-item">
+                            <div class="usage-window-header">
+                                <span>Last 30 Days</span>
+                                <span id="usage-month-text">...</span>
+                            </div>
+                            <div class="progress-bar-container">
+                                <div class="progress-bar" id="usage-month-bar" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Metrics -->
+                <div class="metrics-grid">
+                    <div class="metric-card glass-card">
+                        <div class="metric-icon input-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"></polyline><line x1="9" y1="20" x2="15" y2="20"></line><line x1="12" y1="4" x2="12" y2="20"></line></svg>
+                        </div>
+                        <div class="metric-info">
+                            <h3>Input Tokens</h3>
+                            <div class="metric-value" id="val-input-tokens">0</div>
+                        </div>
+                    </div>
+                    <div class="metric-card glass-card">
+                        <div class="metric-icon output-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+                        </div>
+                        <div class="metric-info">
+                            <h3>Output Tokens</h3>
+                            <div class="metric-value" id="val-output-tokens">0</div>
+                        </div>
+                    </div>
+                    <div class="metric-card glass-card">
+                        <div class="metric-icon input-icon" style="background: rgba(132, 250, 176, 0.1); color: #84fab0;">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                        </div>
+                        <div class="metric-info">
+                            <h3>Cached Tokens</h3>
+                            <div class="metric-value" id="val-cached-tokens">0</div>
+                        </div>
+                    </div>
+                    <div class="metric-card glass-card">
+                        <div class="metric-icon total-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+                        </div>
+                        <div class="metric-info">
+                            <h3>Total Tokens</h3>
+                            <div class="metric-value" id="val-total-tokens">0</div>
+                        </div>
+                    </div>
+                    <div class="metric-card glass-card">
+                        <div class="metric-icon cost-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+                        </div>
+                        <div class="metric-content">
+                            <h3>Metered Cost</h3>
+                            <div class="metric-value" id="val-cost">N/A</div>
+                            <div class="metric-trend" style="font-size: 11px;">Known or recorded prices only</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Charts -->
+                <div class="charts-grid">
+                    <div class="chart-container glass-card main-chart">
+                        <div class="chart-header">
+                            <h3>Token Burn Trend</h3>
+                        </div>
+                        <div class="canvas-wrapper">
+                            <canvas id="trendChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="side-charts">
+                        <div class="chart-container glass-card">
+                            <div class="chart-header">
+                                <h3>By Project</h3>
+                            </div>
+                            <div class="canvas-wrapper doughnut-wrapper">
+                                <canvas id="projectChart"></canvas>
+                            </div>
+                        </div>
+                        <div class="chart-container glass-card">
+                            <div class="chart-header">
+                                <h3>By Model</h3>
+                            </div>
+                            <div class="canvas-wrapper doughnut-wrapper">
+                                <canvas id="modelChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Sessions Table -->
+                <div class="glass-card" style="margin-top: 24px; display: flex; flex-direction: column;">
+                    <div class="card-header">
+                        <h2>Sessions</h2>
+                        <div class="table-actions">
+                            <span class="record-count" id="session-count">0 sessions found</span>
+                        </div>
+                    </div>
+                    <div class="table-container" style="max-height: 400px; overflow-y: auto;">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Agent</th>
+                                    <th>Title</th>
+                                    <th>Project</th>
+                                    <th>Model</th>
+                                    <th>Input</th>
+                                    <th>Cached</th>
+                                    <th>Output</th>
+                                    <th>Total</th>
+                                </tr>
+                            </thead>
+                            <tbody id="sessions-table-body">
+                                <!-- Data injected here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Projects View -->
+            <div class="view-section" id="view-projects">
+                <div class="glass-card full-height-card">
+                    <div class="card-header">
+                        <h2>Project Usage Breakdown</h2>
+                        <span style="font-size: 12px; color: var(--text-secondary);">Costs show only when priced or recorded</span>
+                    </div>
+                    <div class="table-container" style="max-height: calc(100vh - 150px); overflow-y: auto;">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Project Name</th>
+                                    <th>Agent</th>
+                                    <th>Total Sessions</th>
+                                    <th>Total Chats</th>
+                                    <th>Input Tokens</th>
+                                    <th>Cached Tokens</th>
+                                    <th>Cache Writes</th>
+                                    <th>Output Tokens</th>
+                                    <th>Metered Cost</th>
+                                </tr>
+                            </thead>
+                            <tbody id="projects-table-body">
+                                <!-- Data injected here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Agents View -->
+            <div class="view-section" id="view-agents">
+                <div class="glass-card full-height-card">
+                    <div class="card-header">
+                        <h2>Agent Usage Breakdown</h2>
+                        <span class="record-count" id="agent-count">0 agents found</span>
+                    </div>
+                    <div class="table-container" style="max-height: calc(100vh - 150px); overflow-y: auto;">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Agent</th>
+                                    <th>Sessions</th>
+                                    <th>Chats</th>
+                                    <th>Input</th>
+                                    <th>Cached</th>
+                                    <th>Cache Writes</th>
+                                    <th>Output</th>
+                                    <th>Total</th>
+                                </tr>
+                            </thead>
+                            <tbody id="agents-table-body">
+                                <!-- Data injected here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chats View -->
+            <div class="view-section" id="view-chats">
+                <div class="glass-card full-height-card">
+                    <div class="card-header">
+                        <h2>Chat Usage Breakdown</h2>
+                        <span class="record-count" id="chat-count">0 chats found</span>
+                    </div>
+                    <div class="table-container" style="max-height: calc(100vh - 150px); overflow-y: auto;">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Agent</th>
+                                    <th>Project</th>
+                                    <th>Session</th>
+                                    <th>Model</th>
+                                    <th>Input</th>
+                                    <th>Cached</th>
+                                    <th>Cache Writes</th>
+                                    <th>Output</th>
+                                    <th>Total</th>
+                                </tr>
+                            </thead>
+                            <tbody id="chats-table-body">
+                                <!-- Data injected here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings View -->
+            <div class="view-section" id="view-settings">
+                <div class="glass-card settings-card">
+                    <h2>Configuration</h2>
+                    <p class="subtitle">Customize how TokenLens works.</p>
+
+                    <div class="form-group">
+                        <label for="custom-path">Antigravity Data Directory Override</label>
+                        <div class="input-with-button">
+                            <input type="text" id="custom-path" placeholder="e.g. %USERPROFILE%\.gemini\antigravity">
+                            <button id="save-path-btn" class="btn primary-btn">Apply</button>
+                        </div>
+                        <small>Other agents are auto-detected from local Claude Code, Codex, and Cline storage paths.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Fallback API Rates</label>
+                        <div class="rate-inputs">
+                            <div class="input-col">
+                                <label for="rate-input">Input (per 1M tokens)</label>
+                                <div class="currency-input">
+                                    <span class="currency-symbol">$</span>
+                                    <input type="number" id="rate-input" placeholder="optional" step="0.01" min="0">
+                                </div>
+                            </div>
+                            <div class="input-col">
+                                <label for="rate-output">Output (per 1M tokens)</label>
+                                <div class="currency-input">
+                                    <span class="currency-symbol">$</span>
+                                    <input type="number" id="rate-output" placeholder="optional" step="0.01" min="0">
+                                </div>
+                            </div>
+                        </div>
+                        <button id="save-rates-btn" class="btn secondary-btn mt-2">Save Fallback Rates</button>
+                        <small>Disabled by default. Enable fallback mode only for metered API usage where one average rate is acceptable.</small>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="stacksolvers-modal" class="brand-modal hidden" role="dialog" aria-modal="true" aria-labelledby="stacksolvers-modal-title" aria-describedby="stacksolvers-modal-description">
+        <div class="brand-modal-backdrop" data-brand-modal-close></div>
+        <section class="brand-modal-panel" tabindex="-1">
+            <button class="brand-modal-close" type="button" data-brand-modal-close aria-label="Close Stack Solvers information">
+                <span aria-hidden="true">&times;</span>
+            </button>
+            <div class="brand-modal-head">
+                <div class="brand-modal-logo">
+                    <img src="StackSolvers.png" alt="Stack Solvers for IT Solutions">
+                </div>
+                <div>
+                    <p class="brand-kicker">Produced by</p>
+                    <h2 id="stacksolvers-modal-title">Stack Solvers for IT Solutions</h2>
+                </div>
+            </div>
+            <p id="stacksolvers-modal-description" class="brand-modal-copy">
+                Stack Solvers is the team behind TokenLens. Their public site presents work across software solutions,
+                device integration, and mobile application services for practical business systems.
+            </p>
+            <div class="brand-service-list" aria-label="Stack Solvers service areas">
+                <span>Software solutions</span>
+                <span>Device integration</span>
+                <span>Mobile applications</span>
+            </div>
+            <div class="brand-modal-actions">
+                <a class="btn primary-btn" href="https://www.stacksolvers.com" target="_blank" rel="noopener noreferrer">Visit Website</a>
+                <a class="btn secondary-btn" href="https://www.stacksolvers.com/about" target="_blank" rel="noopener noreferrer">About</a>
+                <a class="btn secondary-btn" href="https://www.stacksolvers.com/contact" target="_blank" rel="noopener noreferrer">Contact</a>
+            </div>
+        </section>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
