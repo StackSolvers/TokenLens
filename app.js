@@ -9,6 +9,8 @@ let charts = {};
 let chartMeta = {};
 let priceMap = {};
 let serverConfig = {};
+let latestScope = { agent: '', project: '' };
+let hasUserFilterInteraction = false;
 
 async function fetchLivePricing() {
     try {
@@ -204,20 +206,32 @@ function setupBrandModal() {
 }
 
 function setupFilters() {
-    document.getElementById('global-search').addEventListener('input', applyFilters);
+    document.getElementById('global-search').addEventListener('input', () => {
+        hasUserFilterInteraction = true;
+        applyFilters();
+    });
     document.getElementById('date-from').addEventListener('change', () => {
+        hasUserFilterInteraction = true;
         clearQuickFilters();
         applyFilters();
     });
     document.getElementById('date-to').addEventListener('change', () => {
+        hasUserFilterInteraction = true;
         clearQuickFilters();
         applyFilters();
     });
-    document.getElementById('project-filter').addEventListener('change', applyFilters);
-    document.getElementById('agent-filter').addEventListener('change', applyFilters);
+    document.getElementById('project-filter').addEventListener('change', () => {
+        hasUserFilterInteraction = true;
+        applyFilters();
+    });
+    document.getElementById('agent-filter').addEventListener('change', () => {
+        hasUserFilterInteraction = true;
+        applyFilters();
+    });
 
     document.querySelectorAll('.quick-filter-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
+            hasUserFilterInteraction = true;
             document.querySelectorAll('.quick-filter-btn').forEach(b => b.classList.remove('active'));
             e.target.classList.add('active');
             applyQuickFilter(e.target.dataset.range);
@@ -321,7 +335,7 @@ async function fetchData(customPath = null) {
 
         populateProjectFilter();
         populateAgentFilter();
-        focusLatestScope(data.summary || null);
+        captureLatestScope(data.summary || null);
         renderAgentTable();
         applyFilters();
 
@@ -480,20 +494,12 @@ function populateAgentFilter() {
     select.value = agents.has(current) ? current : '';
 }
 
-function focusLatestScope(summary) {
+function captureLatestScope(summary) {
     const current = summary && summary.current_session ? summary.current_session : {};
-    const agentSelect = document.getElementById('agent-filter');
-    const projectSelect = document.getElementById('project-filter');
-
-    if (agentSelect && !agentSelect.value && current.agent) {
-        const hasAgent = Array.from(agentSelect.options).some(opt => opt.value === current.agent);
-        if (hasAgent) agentSelect.value = current.agent;
-    }
-
-    if (projectSelect && !projectSelect.value && current.project && current.project !== 'Unknown Project') {
-        const hasProject = Array.from(projectSelect.options).some(opt => opt.value === current.project);
-        if (hasProject) projectSelect.value = current.project;
-    }
+    latestScope = {
+        agent: current.agent || '',
+        project: current.project && current.project !== 'Unknown Project' ? current.project : '',
+    };
 }
 
 function resetSelect(select, label) {
@@ -567,7 +573,8 @@ function updateRollingUsageUIFromChats() {
     let tokens24Hr = 0;
     let tokensWeek = 0;
     let tokensMonth = 0;
-    filteredChats.forEach(c => {
+    const sourceChats = rollingUsageSourceChats();
+    sourceChats.forEach(c => {
         const d = new Date(c.time);
         if (isNaN(d)) return;
         if (d >= fiveHoursAgo) tokens5Hr += c.activeTokens;
@@ -580,6 +587,15 @@ function updateRollingUsageUIFromChats() {
     updateRollingUsageUI('usage-24hr', tokens24Hr);
     updateRollingUsageUI('usage-week', tokensWeek);
     updateRollingUsageUI('usage-month', tokensMonth);
+}
+
+function rollingUsageSourceChats() {
+    if (hasUserFilterInteraction || !latestScope.agent) return filteredChats;
+    return rawChats.filter(c => {
+        if (latestScope.agent && c.agent !== latestScope.agent) return false;
+        if (latestScope.project && c.project !== latestScope.project) return false;
+        return true;
+    });
 }
 
 function updateRollingUsageUI(prefix, used) {
@@ -627,6 +643,7 @@ function renderProjectsTable() {
         addCell(tr, formatNumber(p.active), 'strong-cell');
         addCell(tr, formatCostDetail(p.cost), p.cost.amount > 0 ? 'success-cell' : '');
         tr.addEventListener('click', () => {
+            hasUserFilterInteraction = true;
             document.getElementById('project-filter').value = p.name;
             document.getElementById('agent-filter').value = p.agent;
             applyFilters();

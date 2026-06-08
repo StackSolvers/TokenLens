@@ -71,7 +71,7 @@ python server.py
 python server.py --no-browser
 ```
 
-The dashboard starts focused on the latest active agent and latest known project, then shows active rolling local usage windows, top projects, top models, sessions, and individual chat/model calls. Rolling cards respect the current agent/project/date filters. Active usage excludes cached reads so repeated context cache does not look like fresh token burn. Charts are local and interactive; hover points and slices to inspect values.
+The dashboard keeps tables global by default while the rolling cards start focused on the latest active agent and latest known project. After you touch any filter, the rolling cards follow the current agent/project/date filters. Active usage excludes cached reads so repeated context cache does not look like fresh token burn. Charts are local and interactive; hover points and slices to inspect values.
 
 ## Active Vs Raw Tokens
 
