@@ -321,7 +321,7 @@ async function fetchData(customPath = null) {
 
         populateProjectFilter();
         populateAgentFilter();
-        updateRollingUsageUIFromSummary(data.summary || null);
+        focusLatestScope(data.summary || null);
         renderAgentTable();
         applyFilters();
 
@@ -480,6 +480,22 @@ function populateAgentFilter() {
     select.value = agents.has(current) ? current : '';
 }
 
+function focusLatestScope(summary) {
+    const current = summary && summary.current_session ? summary.current_session : {};
+    const agentSelect = document.getElementById('agent-filter');
+    const projectSelect = document.getElementById('project-filter');
+
+    if (agentSelect && !agentSelect.value && current.agent) {
+        const hasAgent = Array.from(agentSelect.options).some(opt => opt.value === current.agent);
+        if (hasAgent) agentSelect.value = current.agent;
+    }
+
+    if (projectSelect && !projectSelect.value && current.project && current.project !== 'Unknown Project') {
+        const hasProject = Array.from(projectSelect.options).some(opt => opt.value === current.project);
+        if (hasProject) projectSelect.value = current.project;
+    }
+}
+
 function resetSelect(select, label) {
     while (select.options.length) select.remove(0);
     appendOption(select, '', label);
@@ -517,6 +533,7 @@ function applyFilters() {
     });
 
     updateMetrics();
+    updateRollingUsageUIFromChats();
     updateCharts();
     renderTable();
     renderProjectsTable();
@@ -539,15 +556,7 @@ function matchesDate(value, dateFrom, dateTo) {
     return true;
 }
 
-function updateRollingUsageUIFromSummary(summary) {
-    if (summary && summary.rolling_usage) {
-        updateRollingUsageUI('usage-5hr', summary.rolling_usage.five_hour.used);
-        updateRollingUsageUI('usage-24hr', summary.rolling_usage.twenty_four_hour.used);
-        updateRollingUsageUI('usage-week', summary.rolling_usage.weekly.used);
-        updateRollingUsageUI('usage-month', summary.rolling_usage.monthly.used);
-        return;
-    }
-
+function updateRollingUsageUIFromChats() {
     const now = new Date();
     const fiveHoursAgo = new Date(now.getTime() - (5 * 60 * 60 * 1000));
     const twentyFourHoursAgo = new Date(now.getTime() - (24 * 60 * 60 * 1000));
@@ -558,7 +567,7 @@ function updateRollingUsageUIFromSummary(summary) {
     let tokens24Hr = 0;
     let tokensWeek = 0;
     let tokensMonth = 0;
-    rawChats.forEach(c => {
+    filteredChats.forEach(c => {
         const d = new Date(c.time);
         if (isNaN(d)) return;
         if (d >= fiveHoursAgo) tokens5Hr += c.activeTokens;
