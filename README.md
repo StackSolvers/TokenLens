@@ -71,6 +71,8 @@ python server.py --no-browser
 
 The dashboard keeps tables global by default while the rolling cards start focused on the latest active agent and latest known project. After you touch any filter, the rolling cards follow the current agent/project/date filters. Active usage excludes cached reads so repeated context cache does not look like fresh token burn. Charts are local and interactive; hover points and slices to inspect values.
 
+Click an agent row to browse that agent's projects. Click a project row to browse that project's chats.
+
 ## Active Vs Raw Tokens
 
 TokenLens keeps both raw and active token totals:

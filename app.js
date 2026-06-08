@@ -39,12 +39,16 @@ function setupNavigation() {
     navItems.forEach(item => {
         item.addEventListener('click', (e) => {
             e.preventDefault();
-            navItems.forEach(nav => nav.classList.remove('active'));
-            views.forEach(view => view.classList.remove('active'));
-            item.classList.add('active');
-            document.getElementById(`view-${item.dataset.view}`).classList.add('active');
+            showView(item.dataset.view);
         });
     });
+}
+
+function showView(viewName) {
+    const navItems = document.querySelectorAll('.nav-item');
+    const views = document.querySelectorAll('.view-section');
+    navItems.forEach(nav => nav.classList.toggle('active', nav.dataset.view === viewName));
+    views.forEach(view => view.classList.toggle('active', view.id === `view-${viewName}`));
 }
 
 function setupBrandModal() {
@@ -453,7 +457,7 @@ function renderProjectsTable() {
             document.getElementById('project-filter').value = p.name;
             document.getElementById('agent-filter').value = p.agent;
             applyFilters();
-            document.querySelector('.nav-item[data-view="dashboard"]').click();
+            showView('chats');
         });
         tbody.appendChild(tr);
     });
@@ -463,7 +467,7 @@ function renderAgentTable() {
     const map = {};
     filteredData.forEach(s => {
         if (!map[s.agent]) {
-            map[s.agent] = { agentName: s.agentName, sessions: 0, chats: 0, input: 0, cached: 0, cacheWrites: 0, output: 0, active: 0, total: 0 };
+            map[s.agent] = { agent: s.agent, agentName: s.agentName, sessions: 0, chats: 0, input: 0, cached: 0, cacheWrites: 0, output: 0, active: 0, total: 0 };
         }
         const bucket = map[s.agent];
         bucket.sessions += 1;
@@ -482,6 +486,7 @@ function renderAgentTable() {
     clearRows(tbody);
     rows.forEach(a => {
         const tr = document.createElement('tr');
+        tr.style.cursor = 'pointer';
         addCell(tr, a.agentName);
         addCell(tr, a.sessions);
         addCell(tr, a.chats);
@@ -490,6 +495,13 @@ function renderAgentTable() {
         addCell(tr, formatNumber(a.cacheWrites), 'success-cell');
         addCell(tr, formatNumber(a.output));
         addCell(tr, formatNumber(a.active), 'strong-cell');
+        tr.addEventListener('click', () => {
+            hasUserFilterInteraction = true;
+            document.getElementById('agent-filter').value = a.agent;
+            document.getElementById('project-filter').value = '';
+            applyFilters();
+            showView('projects');
+        });
         tbody.appendChild(tr);
     });
 }
