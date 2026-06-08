@@ -4,7 +4,17 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tokenlens_core import DEFAULT_CONFIG, collect_all_usage, compact_summary, deep_merge, install_workspace_rules
+from tokenlens_core import (
+    DEFAULT_CONFIG,
+    collect_all_usage,
+    compact_summary,
+    deep_merge,
+    finalize_session,
+    install_workspace_rules,
+    make_generation,
+    make_session,
+    summarize_usage,
+)
 
 
 class EnvPatch:
@@ -158,15 +168,20 @@ class CollectorTests(unittest.TestCase):
 
             agents = {a["agent"]: a for a in data["agents"]}
             self.assertEqual(agents["claude_code"]["total_tokens"], 100)
+            self.assertEqual(agents["claude_code"]["active_tokens"], 80)
             self.assertEqual(agents["codex"]["total_tokens"], 190)
+            self.assertEqual(agents["codex"]["active_tokens"], 140)
             self.assertEqual(agents["codex"]["chats"], 2)
             self.assertEqual(agents["cline"]["total_tokens"], 34)
+            self.assertEqual(agents["cline"]["active_tokens"], 25)
             self.assertEqual(data["summary"]["total_tokens"], 324)
+            self.assertEqual(data["summary"]["active_tokens"], 245)
             self.assertIn("current_session", data["summary"])
             self.assertIn("windows_by_agent", data["summary"])
             self.assertIn("rolling_usage_by_agent", data["summary"])
             summary_line = compact_summary(data)
             self.assertIn("TokenLens |", summary_line)
+            self.assertIn("| active |", summary_line)
             self.assertIn("session ", summary_line)
             self.assertIn("last ", summary_line)
             self.assertIn("5h ", summary_line)
@@ -185,6 +200,30 @@ class CollectorTests(unittest.TestCase):
                 content = (root / filename).read_text(encoding="utf-8")
                 self.assertIn("--compact", content)
                 self.assertIn("never use dashboard output for routine turn summaries", content)
+
+    def test_active_tokens_exclude_cached_reads_for_any_agent(self):
+        session = make_session("antigravity", "ag-a", "Project", "Title")
+        session["generations"] = [
+            make_generation(
+                "antigravity",
+                "ag-a",
+                "1",
+                timestamp="2026-06-07T12:00:00Z",
+                input_tokens=100,
+                cached_tokens=900,
+                cache_write_tokens=20,
+                output_tokens=30,
+                reasoning_tokens=5,
+            )
+        ]
+        session = finalize_session(session)
+
+        self.assertEqual(session["totals"]["total_tokens"], 1055)
+        self.assertEqual(session["totals"]["active_tokens"], 155)
+
+        summary = summarize_usage([session], DEFAULT_CONFIG)
+        self.assertEqual(summary["total_tokens"], 1055)
+        self.assertEqual(summary["active_tokens"], 155)
 
 
 if __name__ == "__main__":

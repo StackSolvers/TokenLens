@@ -189,6 +189,15 @@ def usage_total(usage):
     )
 
 
+def usage_active(usage):
+    return int(
+        (usage.get("input_tokens") or 0)
+        + (usage.get("cache_write_tokens") or 0)
+        + (usage.get("output_tokens") or 0)
+        + (usage.get("reasoning_tokens") or 0)
+    )
+
+
 def make_generation(
     agent,
     session_id,
@@ -211,6 +220,7 @@ def make_generation(
     output_tokens = int(output_tokens or 0)
     reasoning_tokens = int(reasoning_tokens or 0)
     calculated = input_tokens + cached_tokens + cache_write_tokens + output_tokens + reasoning_tokens
+    active = input_tokens + cache_write_tokens + output_tokens + reasoning_tokens
     return {
         "agent": agent,
         "agent_name": AGENT_NAMES.get(agent, agent),
@@ -224,6 +234,7 @@ def make_generation(
         "output_tokens": output_tokens,
         "reasoning_tokens": reasoning_tokens,
         "total_tokens": int(total_tokens if total_tokens is not None else calculated),
+        "active_tokens": active,
         "cost": cost,
         "source_path": source_path,
         "confidence": confidence,
@@ -259,6 +270,7 @@ def finalize_session(session):
         "output_tokens": 0,
         "reasoning_tokens": 0,
         "total_tokens": 0,
+        "active_tokens": 0,
         "cost": 0.0,
     }
     cost_seen = False
@@ -266,6 +278,7 @@ def finalize_session(session):
         for key in ("input_tokens", "cached_tokens", "cache_write_tokens", "output_tokens", "reasoning_tokens"):
             total[key] += int(gen.get(key) or 0)
         total["total_tokens"] += int(gen.get("total_tokens") or usage_total(gen))
+        total["active_tokens"] += int(gen.get("active_tokens") or usage_active(gen))
         if gen.get("cost") is not None:
             cost_seen = True
             try:
@@ -928,6 +941,7 @@ def summarize_agents(sessions, sources):
             "output_tokens": 0,
             "reasoning_tokens": 0,
             "sources": [],
+            "active_tokens": 0,
         }
     for source in sources:
         agent = source.get("agent")
@@ -940,7 +954,7 @@ def summarize_agents(sessions, sources):
         bucket["sessions"] = bucket.get("sessions", 0) + 1
         bucket["chats"] = bucket.get("chats", 0) + len(session.get("generations", []))
         totals = session.get("totals", {})
-        for key in ("input_tokens", "cached_tokens", "cache_write_tokens", "output_tokens", "reasoning_tokens", "total_tokens"):
+        for key in ("input_tokens", "cached_tokens", "cache_write_tokens", "output_tokens", "reasoning_tokens", "total_tokens", "active_tokens"):
             bucket[key] = bucket.get(key, 0) + int(totals.get(key) or 0)
     return list(result.values())
 
@@ -960,10 +974,13 @@ def summarize_usage(sessions, config):
         "output_tokens": 0,
         "reasoning_tokens": 0,
         "total_tokens": 0,
+        "active_tokens": 0,
         "sessions": len(sessions),
         "chats": 0,
         "windows": {key: 0 for key in windows},
+        "raw_windows": {key: 0 for key in windows},
         "windows_by_agent": {},
+        "raw_windows_by_agent": {},
         "last_chat": None,
         "current_session": None,
     }
@@ -972,29 +989,38 @@ def summarize_usage(sessions, config):
         summary["chats"] += len(session.get("generations", []))
         for gen in session.get("generations", []):
             total = int(gen.get("total_tokens") or usage_total(gen))
+            active = int(gen.get("active_tokens") or usage_active(gen))
             for key in ("input_tokens", "cached_tokens", "cache_write_tokens", "output_tokens", "reasoning_tokens"):
                 summary[key] += int(gen.get(key) or 0)
             summary["total_tokens"] += total
+            summary["active_tokens"] += active
             ts = parse_time(gen.get("timestamp"))
             if ts:
                 agent = session.get("agent", "unknown")
                 agent_windows = summary["windows_by_agent"].setdefault(agent, {key: 0 for key in windows})
+                raw_agent_windows = summary["raw_windows_by_agent"].setdefault(agent, {key: 0 for key in windows})
                 for key, start in windows.items():
                     if start <= ts <= now:
-                        summary["windows"][key] += total
-                        agent_windows[key] += total
+                        summary["windows"][key] += active
+                        summary["raw_windows"][key] += total
+                        agent_windows[key] += active
+                        raw_agent_windows[key] += total
                 if last_time is None or ts > last_time:
                     last_time = ts
                     summary["last_chat"] = dict(gen)
+                    summary["last_chat"]["active_tokens"] = active
                     summary["last_chat"]["project"] = session.get("project")
                     summary["last_chat"]["title"] = session.get("title")
+                    totals = session.get("totals") or {}
                     summary["current_session"] = {
                         "agent": session.get("agent"),
                         "agent_name": session.get("agent_name"),
                         "session_id": session.get("session_id"),
                         "project": session.get("project"),
                         "title": session.get("title"),
-                        "total_tokens": int((session.get("totals") or {}).get("total_tokens") or 0),
+                        "total_tokens": int(totals.get("total_tokens") or 0),
+                        "active_tokens": int(totals.get("active_tokens") or 0),
+                        "cached_tokens": int(totals.get("cached_tokens") or 0),
                         "chats": len(session.get("generations", [])),
                     }
     summary["rolling_usage"] = {
@@ -1002,6 +1028,12 @@ def summarize_usage(sessions, config):
         "twenty_four_hour": rolling_usage_summary(summary["windows"]["twenty_four_hour"]),
         "weekly": rolling_usage_summary(summary["windows"]["weekly"]),
         "monthly": rolling_usage_summary(summary["windows"]["monthly"]),
+    }
+    summary["rolling_raw_usage"] = {
+        "five_hour": rolling_usage_summary(summary["raw_windows"]["five_hour"]),
+        "twenty_four_hour": rolling_usage_summary(summary["raw_windows"]["twenty_four_hour"]),
+        "weekly": rolling_usage_summary(summary["raw_windows"]["weekly"]),
+        "monthly": rolling_usage_summary(summary["raw_windows"]["monthly"]),
     }
     summary["rolling_usage_by_agent"] = {
         agent: {
@@ -1011,6 +1043,15 @@ def summarize_usage(sessions, config):
             "monthly": rolling_usage_summary(agent_windows.get("monthly", 0)),
         }
         for agent, agent_windows in summary["windows_by_agent"].items()
+    }
+    summary["rolling_raw_usage_by_agent"] = {
+        agent: {
+            "five_hour": rolling_usage_summary(agent_windows.get("five_hour", 0)),
+            "twenty_four_hour": rolling_usage_summary(agent_windows.get("twenty_four_hour", 0)),
+            "weekly": rolling_usage_summary(agent_windows.get("weekly", 0)),
+            "monthly": rolling_usage_summary(agent_windows.get("monthly", 0)),
+        }
+        for agent, agent_windows in summary["raw_windows_by_agent"].items()
     }
     return summary
 
@@ -1024,8 +1065,8 @@ def compact_summary(data):
     rolling_usage = summary.get("rolling_usage", {})
     last = summary.get("last_chat") or {}
     session = summary.get("current_session") or {}
-    last_total = last.get("total_tokens", 0)
-    session_total = session.get("total_tokens", 0)
+    last_total = last.get("active_tokens", last.get("total_tokens", 0))
+    session_total = session.get("active_tokens", session.get("total_tokens", 0))
     agent_id = session.get("agent") or last.get("agent")
     agent = session.get("agent_name") or last.get("agent_name") or AGENT_NAMES.get(last.get("agent"), "")
     agent_usage = summary.get("rolling_usage_by_agent", {}).get(agent_id, {}) if agent_id else {}
@@ -1037,6 +1078,7 @@ def compact_summary(data):
     agent_label = agent or "Agent"
     return (
         f"TokenLens | {agent_label} | "
+        f"active | "
         f"session {fmt_tokens(session_total)} | "
         f"last {fmt_tokens(last_total)} | "
         f"{window_text} | estimated"
@@ -1054,21 +1096,25 @@ def human_summary(data, compact=False):
         if current:
             lines.append(
                 "Current: "
-                f"{fmt_tokens(current.get('total_tokens', 0))} "
-                f"({current.get('agent_name') or AGENT_NAMES.get(current.get('agent'), 'Agent')}, "
+                f"{fmt_tokens(current.get('active_tokens', current.get('total_tokens', 0)))} active "
+                f"({fmt_tokens(current.get('total_tokens', 0))} raw, "
+                f"{fmt_tokens(current.get('cached_tokens', 0))} cached; "
+                f"{current.get('agent_name') or AGENT_NAMES.get(current.get('agent'), 'Agent')}, "
                 f"{current.get('chats', 0)} chats)"
             )
         lines.append(
             "Last: "
-            f"{fmt_tokens(last.get('total_tokens', 0))} "
-            f"({last.get('agent_name') or AGENT_NAMES.get(last.get('agent'), 'Agent')}, "
+            f"{fmt_tokens(last.get('active_tokens', last.get('total_tokens', 0)))} active "
+            f"({fmt_tokens(last.get('total_tokens', 0))} raw, "
+            f"{last.get('agent_name') or AGENT_NAMES.get(last.get('agent'), 'Agent')}, "
             f"{fmt_tokens(last.get('input_tokens', 0))} in, "
             f"{fmt_tokens(last.get('cached_tokens', 0))} cache, "
             f"{fmt_tokens(last.get('output_tokens', 0))} out)"
         )
     lines.append(
         "All: "
-        f"{fmt_tokens(summary.get('total_tokens', 0))} tokens "
+        f"{fmt_tokens(summary.get('active_tokens', summary.get('total_tokens', 0)))} active tokens "
+        f"({fmt_tokens(summary.get('total_tokens', 0))} raw) "
         f"across {summary.get('sessions', 0)} sessions/{summary.get('chats', 0)} chats"
     )
     lines.append(
@@ -1078,7 +1124,7 @@ def human_summary(data, compact=False):
     )
     rolling_usage = summary.get("rolling_usage", {})
     lines.append(
-        "Rolling: "
+        "Rolling active: "
         f"5h {fmt_tokens(rolling_usage.get('five_hour', {}).get('used', 0))}, "
         f"24h {fmt_tokens(rolling_usage.get('twenty_four_hour', {}).get('used', 0))}, "
         f"wk {fmt_tokens(rolling_usage.get('weekly', {}).get('used', 0))}, "
@@ -1086,8 +1132,9 @@ def human_summary(data, compact=False):
     )
     agent_bits = []
     for agent in data.get("agents", []):
-        if agent.get("total_tokens", 0):
-            agent_bits.append(f"{agent.get('agent_name')}: {fmt_tokens(agent.get('total_tokens', 0))}")
+        active = int(agent.get("active_tokens") or 0)
+        if active or agent.get("total_tokens", 0):
+            agent_bits.append(f"{agent.get('agent_name')}: {fmt_tokens(active or agent.get('total_tokens', 0))} active")
     if agent_bits:
         lines.append("Agents: " + "; ".join(agent_bits))
     return "\n".join(lines)
@@ -1098,8 +1145,9 @@ def tokenlens_rule_section(cli):
         "\n\n# TokenLens\n"
         "At the end of every assistant turn, run exactly once:\n"
         f"python \"{cli}\" --compact\n"
-        "Append only the returned one-line TokenLens summary. It reports current/latest session tokens (`session`), "
-        "last chat tokens (`last`), and estimated current-agent rolling 5-hour and 24-hour usage. "
+        "Append only the returned one-line TokenLens summary. It reports active tokens for the current/latest session "
+        "(`session`), last model call/chat (`last`), and estimated current-agent rolling 5-hour and 24-hour usage. "
+        "Active tokens exclude cached reads so repeated context cache does not look like fresh burn. "
         "Do not expand it unless asked. The dashboard may be opened for setup or human inspection, "
         "but never use dashboard output for routine turn summaries.\n"
     )

@@ -10,7 +10,7 @@ Produced by Stack Solvers for IT Solutions.
 
 Use it when you want a clear answer to:
 
-- How many tokens did the current agent session use?
+- How many active tokens did the current agent session use?
 - Which projects, chats, and models are driving usage?
 - What happened in the last 5 hours, 24 hours, 7 days, and 30 days?
 - Which costs are recorded or backed by configured model pricing?
@@ -21,7 +21,7 @@ Use it when you want a clear answer to:
 - Breakdowns by agent, project, session, and individual chat/model call.
 - Read-only collectors for local logs and SQLite databases.
 - Compact MCP and CLI summaries designed for agent-safe footer updates.
-- Interactive local dashboard with rolling usage cards and charts.
+- Interactive local dashboard with active rolling usage cards and charts.
 - Local dashboard served on `127.0.0.1`.
 - No default telemetry, uploads, or remote pricing calls.
 - Cost reporting uses recorded or known model prices only by default.
@@ -71,7 +71,18 @@ python server.py
 python server.py --no-browser
 ```
 
-The dashboard shows rolling local usage windows, top projects, top models, sessions, and individual chat/model calls. Charts are local and interactive; hover points and slices to inspect values.
+The dashboard shows active rolling local usage windows, top projects, top models, sessions, and individual chat/model calls. Active usage excludes cached reads so repeated context cache does not look like fresh token burn. Charts are local and interactive; hover points and slices to inspect values.
+
+## Active Vs Raw Tokens
+
+TokenLens keeps both raw and active token totals:
+
+- Active tokens are the default for the dashboard, CLI footer, and MCP summary.
+- Cached reads are tracked separately and excluded from active totals.
+- Raw totals remain available in JSON output for audit and debugging.
+- Cache writes are included in active usage because they represent newly written context.
+
+This keeps long-context agents from looking far more expensive than they are when most of the logged usage is cached context replay.
 
 ## CLI
 
@@ -84,7 +95,7 @@ python cli.py --json
 Example compact output:
 
 ```text
-TokenLens | Codex | session 12.4M | last 135.2k | 5h 48.6M | 24h 210.4M | estimated
+TokenLens | Codex | active | session 2.5M | last 4.8k | 5h 418.1k | 24h 2.5M | estimated
 ```
 
 ## MCP Tool
@@ -108,10 +119,10 @@ python cli.py --install-rules --workspace .
 Run the command from the project you want the agent to work in, or pass an absolute path after `--workspace`. This adds a short TokenLens instruction to common agent rule files in that workspace, including `.airules`, `.cursorrules`, `.clinerules`, `AGENTS.md`, `CLAUDE.md`, and `GEMINI.md`. The instruction tells the agent to run the compact check exactly once at the end of each turn and append only the one-line result:
 
 ```text
-TokenLens | Codex | session 12.4M | last 135.2k | 5h 48.6M | 24h 210.4M | estimated
+TokenLens | Codex | active | session 2.5M | last 4.8k | 5h 418.1k | 24h 2.5M | estimated
 ```
 
-The `5h` and `24h` values are rolling local estimates for the current/latest agent. They are not provider-confirmed remaining allowance.
+The compact footer reports active tokens. Cached reads are tracked separately in the dashboard and JSON output, but excluded from the footer so context-cache replay does not look like fresh burn. The `5h` and `24h` values are rolling local estimates for the current/latest agent. They are not provider-confirmed remaining allowance.
 
 The dashboard is for human inspection. Agents should use the compact CLI or MCP tool for turn summaries, not the dashboard after each chat.
 

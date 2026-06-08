@@ -107,8 +107,8 @@
                 <!-- Rolling Usage Section -->
                 <div class="glass-card" style="margin-bottom: 24px;">
                     <div class="card-header">
-                        <h2>Rolling Token Usage</h2>
-                        <span style="font-size: 12px; color: var(--text-secondary);">Local usage windows, no cap</span>
+                        <h2>Rolling Active Usage</h2>
+                        <span style="font-size: 12px; color: var(--text-secondary);">Cached reads excluded, no cap</span>
                     </div>
                     <div class="usage-window-grid">
                         <div class="usage-window-item">
@@ -184,7 +184,7 @@
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
                         </div>
                         <div class="metric-info">
-                            <h3>Total Tokens</h3>
+                            <h3>Active Tokens</h3>
                             <div class="metric-value" id="val-total-tokens">0</div>
                         </div>
                     </div>
@@ -204,7 +204,7 @@
                 <div class="charts-grid">
                     <div class="chart-container glass-card main-chart">
                         <div class="chart-header">
-                            <h3>Token Burn Trend</h3>
+                            <h3>Active Burn Trend</h3>
                         </div>
                         <div class="canvas-wrapper">
                             <canvas id="trendChart"></canvas>
@@ -250,7 +250,7 @@
                                     <th>Input</th>
                                     <th>Cached</th>
                                     <th>Output</th>
-                                    <th>Total</th>
+                                    <th>Active</th>
                                 </tr>
                             </thead>
                             <tbody id="sessions-table-body">
@@ -280,6 +280,7 @@
                                     <th>Cached Tokens</th>
                                     <th>Cache Writes</th>
                                     <th>Output Tokens</th>
+                                    <th>Active Tokens</th>
                                     <th>Metered Cost</th>
                                 </tr>
                             </thead>
@@ -309,7 +310,7 @@
                                     <th>Cached</th>
                                     <th>Cache Writes</th>
                                     <th>Output</th>
-                                    <th>Total</th>
+                                    <th>Active</th>
                                 </tr>
                             </thead>
                             <tbody id="agents-table-body">
@@ -340,7 +341,7 @@
                                     <th>Cached</th>
                                     <th>Cache Writes</th>
                                     <th>Output</th>
-                                    <th>Total</th>
+                                    <th>Active</th>
                                 </tr>
                             </thead>
                             <tbody id="chats-table-body">

@@ -376,6 +376,7 @@ function processRawData(sessions) {
         let outTokens = totals.output_tokens ?? sum(gens, 'output_tokens');
         let reasoningTokens = totals.reasoning_tokens ?? sum(gens, 'reasoning_tokens');
         let totalTokens = totals.total_tokens ?? gens.reduce((acc, g) => acc + generationTotal(g), 0);
+        let activeTokens = totals.active_tokens ?? gens.reduce((acc, g) => acc + generationActive(g), 0);
         let model = gens.length > 0 ? (gens[0].model || 'Unknown Model') : 'Unknown Model';
 
         return {
@@ -393,6 +394,7 @@ function processRawData(sessions) {
             outTokens,
             reasoningTokens,
             totalTokens,
+            activeTokens,
             cost: totals.cost,
             generations: gens
         };
@@ -418,6 +420,7 @@ function processRawChats(sessions) {
                 outTokens: g.output_tokens || 0,
                 reasoningTokens: g.reasoning_tokens || 0,
                 totalTokens: generationTotal(g),
+                activeTokens: generationActive(g),
                 cost: g.cost,
                 confidence: g.confidence || 'exact'
             });
@@ -430,6 +433,10 @@ function generationTotal(g) {
     return g.total_tokens ?? ((g.input_tokens || 0) + (g.cached_tokens || 0) + (g.cache_write_tokens || 0) + (g.output_tokens || 0) + (g.reasoning_tokens || 0));
 }
 
+function generationActive(g) {
+    return g.active_tokens ?? ((g.input_tokens || 0) + (g.cache_write_tokens || 0) + (g.output_tokens || 0) + (g.reasoning_tokens || 0));
+}
+
 function sum(rows, key) {
     return rows.reduce((acc, row) => acc + (row[key] || 0), 0);
 }
@@ -439,7 +446,7 @@ function buildAgentData(sessions) {
     sessions.forEach(s => {
         const key = s.agent;
         if (!map[key]) {
-            map[key] = { agent: s.agent, agent_name: s.agentName, sessions: 0, chats: 0, input_tokens: 0, cached_tokens: 0, cache_write_tokens: 0, output_tokens: 0, total_tokens: 0 };
+            map[key] = { agent: s.agent, agent_name: s.agentName, sessions: 0, chats: 0, input_tokens: 0, cached_tokens: 0, cache_write_tokens: 0, output_tokens: 0, total_tokens: 0, active_tokens: 0 };
         }
         map[key].sessions += 1;
         map[key].chats += s.generations.length;
@@ -448,6 +455,7 @@ function buildAgentData(sessions) {
         map[key].cache_write_tokens += s.cacheWriteTokens;
         map[key].output_tokens += s.outTokens;
         map[key].total_tokens += s.totalTokens;
+        map[key].active_tokens += s.activeTokens;
     });
     return Object.values(map);
 }
@@ -553,10 +561,10 @@ function updateRollingUsageUIFromSummary(summary) {
     rawChats.forEach(c => {
         const d = new Date(c.time);
         if (isNaN(d)) return;
-        if (d >= fiveHoursAgo) tokens5Hr += c.totalTokens;
-        if (d >= twentyFourHoursAgo) tokens24Hr += c.totalTokens;
-        if (d >= sevenDaysAgo) tokensWeek += c.totalTokens;
-        if (d >= thirtyDaysAgo) tokensMonth += c.totalTokens;
+        if (d >= fiveHoursAgo) tokens5Hr += c.activeTokens;
+        if (d >= twentyFourHoursAgo) tokens24Hr += c.activeTokens;
+        if (d >= sevenDaysAgo) tokensWeek += c.activeTokens;
+        if (d >= thirtyDaysAgo) tokensMonth += c.activeTokens;
     });
 
     updateRollingUsageUI('usage-5hr', tokens5Hr);
@@ -580,7 +588,7 @@ function renderProjectsTable() {
     filteredData.forEach(s => {
         const key = `${s.agent}::${s.project}`;
         if (!projMap[key]) {
-            projMap[key] = { name: s.project, agent: s.agent, agentName: s.agentName, sessions: 0, chats: 0, input: 0, cached: 0, cacheWrites: 0, output: 0, total: 0, cost: emptyCostDetail() };
+            projMap[key] = { name: s.project, agent: s.agent, agentName: s.agentName, sessions: 0, chats: 0, input: 0, cached: 0, cacheWrites: 0, output: 0, active: 0, total: 0, cost: emptyCostDetail() };
         }
         const bucket = projMap[key];
         bucket.sessions += 1;
@@ -589,13 +597,14 @@ function renderProjectsTable() {
         bucket.cached += s.cachedTokens;
         bucket.cacheWrites += s.cacheWriteTokens;
         bucket.output += s.outTokens;
+        bucket.active += s.activeTokens;
         bucket.total += s.totalTokens;
         bucket.cost = mergeCostDetail(bucket.cost, sessionCostDetail(s));
     });
 
     const tbody = document.getElementById('projects-table-body');
     clearRows(tbody);
-    Object.values(projMap).sort((a, b) => b.total - a.total).forEach(p => {
+    Object.values(projMap).sort((a, b) => b.active - a.active).forEach(p => {
         const tr = document.createElement('tr');
         tr.style.cursor = 'pointer';
         addCell(tr, p.name);
@@ -606,6 +615,7 @@ function renderProjectsTable() {
         addCell(tr, formatNumber(p.cached), 'success-cell');
         addCell(tr, formatNumber(p.cacheWrites), 'success-cell');
         addCell(tr, formatNumber(p.output));
+        addCell(tr, formatNumber(p.active), 'strong-cell');
         addCell(tr, formatCostDetail(p.cost), p.cost.amount > 0 ? 'success-cell' : '');
         tr.addEventListener('click', () => {
             document.getElementById('project-filter').value = p.name;
@@ -621,7 +631,7 @@ function renderAgentTable() {
     const map = {};
     filteredData.forEach(s => {
         if (!map[s.agent]) {
-            map[s.agent] = { agentName: s.agentName, sessions: 0, chats: 0, input: 0, cached: 0, cacheWrites: 0, output: 0, total: 0 };
+            map[s.agent] = { agentName: s.agentName, sessions: 0, chats: 0, input: 0, cached: 0, cacheWrites: 0, output: 0, active: 0, total: 0 };
         }
         const bucket = map[s.agent];
         bucket.sessions += 1;
@@ -630,10 +640,11 @@ function renderAgentTable() {
         bucket.cached += s.cachedTokens;
         bucket.cacheWrites += s.cacheWriteTokens;
         bucket.output += s.outTokens;
+        bucket.active += s.activeTokens;
         bucket.total += s.totalTokens;
     });
 
-    const rows = Object.values(map).sort((a, b) => b.total - a.total);
+    const rows = Object.values(map).sort((a, b) => b.active - a.active);
     document.getElementById('agent-count').textContent = `${rows.length} agents found`;
     const tbody = document.getElementById('agents-table-body');
     clearRows(tbody);
@@ -646,7 +657,7 @@ function renderAgentTable() {
         addCell(tr, formatNumber(a.cached), 'success-cell');
         addCell(tr, formatNumber(a.cacheWrites), 'success-cell');
         addCell(tr, formatNumber(a.output));
-        addCell(tr, formatNumber(a.total));
+        addCell(tr, formatNumber(a.active), 'strong-cell');
         tbody.appendChild(tr);
     });
 }
@@ -666,7 +677,7 @@ function updateMetrics() {
         totalCost = mergeCostDetail(totalCost, sessionCostDetail(s));
     });
 
-    const tot = filteredData.reduce((acc, s) => acc + s.totalTokens, 0);
+    const tot = filteredData.reduce((acc, s) => acc + s.activeTokens, 0);
     setText("val-input-tokens", formatNumber(totIn));
     setText("val-cached-tokens", formatNumber(totCached + totCacheWrites));
     setText("val-output-tokens", formatNumber(totOut));
@@ -742,9 +753,9 @@ function updateCharts() {
     filteredChats.forEach(c => {
         if (!c.time) return;
         const dStr = c.time.split('T')[0];
-        if (!dailyData[dStr]) dailyData[dStr] = { in: 0, cache: 0, out: 0 };
+        if (!dailyData[dStr]) dailyData[dStr] = { active: 0, in: 0, out: 0 };
+        dailyData[dStr].active += c.activeTokens;
         dailyData[dStr].in += c.inTokens;
-        dailyData[dStr].cache += c.cachedTokens + c.cacheWriteTokens;
         dailyData[dStr].out += c.outTokens;
     });
 
@@ -752,16 +763,16 @@ function updateCharts() {
     createOrUpdateChart('trendChart', 'line', {
         labels: sortedDates,
         datasets: [
+            { label: 'Active Tokens', data: sortedDates.map(d => dailyData[d].active), borderColor: '#84fab0', backgroundColor: 'rgba(132, 250, 176, 0.12)', fill: true, tension: 0.4 },
             { label: 'Output Tokens', data: sortedDates.map(d => dailyData[d].out), borderColor: '#00f2fe', backgroundColor: 'rgba(0, 242, 254, 0.1)', fill: true, tension: 0.4 },
-            { label: 'Input Tokens', data: sortedDates.map(d => dailyData[d].in), borderColor: '#a18cd1', backgroundColor: 'rgba(161, 140, 209, 0.1)', fill: true, tension: 0.4 },
-            { label: 'Cache Tokens', data: sortedDates.map(d => dailyData[d].cache), borderColor: '#84fab0', backgroundColor: 'rgba(132, 250, 176, 0.1)', fill: true, tension: 0.4 }
+            { label: 'Input Tokens', data: sortedDates.map(d => dailyData[d].in), borderColor: '#a18cd1', backgroundColor: 'rgba(161, 140, 209, 0.1)', fill: true, tension: 0.4 }
         ]
     }, chartOptions());
 
     const projData = {};
     filteredData.forEach(s => {
         if (!projData[s.project]) projData[s.project] = 0;
-        projData[s.project] += s.totalTokens;
+        projData[s.project] += s.activeTokens;
     });
     const projLabels = Object.keys(projData).sort((a, b) => projData[b] - projData[a]).slice(0, 5);
     createOrUpdateChart('projectChart', 'doughnut', {
@@ -773,7 +784,7 @@ function updateCharts() {
     filteredChats.forEach(c => {
         const m = c.model || 'Unknown Model';
         if (!modData[m]) modData[m] = 0;
-        modData[m] += c.totalTokens;
+        modData[m] += c.activeTokens;
     });
     const modLabels = Object.keys(modData).sort((a, b) => modData[b] - modData[a]).slice(0, 8);
     createOrUpdateChart('modelChart', 'doughnut', {
@@ -1149,7 +1160,7 @@ function renderTable() {
         addCell(tr, formatNumber(s.inTokens));
         addCell(tr, formatNumber(s.cachedTokens + s.cacheWriteTokens), 'success-cell');
         addCell(tr, formatNumber(s.outTokens));
-        addCell(tr, formatNumber(s.totalTokens), 'strong-cell');
+        addCell(tr, formatNumber(s.activeTokens), 'strong-cell');
         tbody.appendChild(tr);
     });
 }
@@ -1170,7 +1181,7 @@ function renderChatTable() {
         addCell(tr, formatNumber(c.cachedTokens), 'success-cell');
         addCell(tr, formatNumber(c.cacheWriteTokens), 'success-cell');
         addCell(tr, formatNumber(c.outTokens));
-        addCell(tr, formatNumber(c.totalTokens), 'strong-cell');
+        addCell(tr, formatNumber(c.activeTokens), 'strong-cell');
         tbody.appendChild(tr);
     });
 }
