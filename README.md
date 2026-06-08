@@ -45,8 +45,18 @@ No Python package installation is required.
 
 ## Quick Start
 
+### AI Agent Prompt
+
+Copy this into your AI coding agent:
+
+```text
+Set up TokenLens locally for this workspace: clone https://github.com/StackSolvers/TokenLens.git if needed, run `python <TokenLens>/cli.py --compact`, run `python <TokenLens>/cli.py --install-rules`, then start `python <TokenLens>/server.py`. Keep output concise and do not add telemetry or external model API calls.
+```
+
+### Manual Setup
+
 ```powershell
-git clone https://github.com/<your-org>/TokenLens.git
+git clone https://github.com/StackSolvers/TokenLens.git
 cd TokenLens
 python cli.py --compact
 python server.py
