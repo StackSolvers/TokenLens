@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tokenlens_core import DEFAULT_CONFIG, collect_all_usage, compact_summary, deep_merge
+from tokenlens_core import DEFAULT_CONFIG, collect_all_usage, compact_summary, deep_merge, install_workspace_rules
 
 
 class EnvPatch:
@@ -173,6 +173,18 @@ class CollectorTests(unittest.TestCase):
             self.assertIn("24h ", summary_line)
             self.assertTrue(summary_line.endswith("estimated"))
             self.assertNotIn("\n", summary_line)
+
+    def test_install_workspace_rules_creates_common_agent_rule_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            touched = install_workspace_rules(workspace_dir=root, cli_path=root / "TokenLens" / "cli.py")
+            touched_names = {Path(path).name for path in touched}
+
+            for filename in [".airules", ".cursorrules", ".clinerules", "AGENTS.md", "CLAUDE.md", "GEMINI.md"]:
+                self.assertIn(filename, touched_names)
+                content = (root / filename).read_text(encoding="utf-8")
+                self.assertIn("--compact", content)
+                self.assertIn("never use dashboard output for routine turn summaries", content)
 
 
 if __name__ == "__main__":

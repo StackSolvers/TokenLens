@@ -14,7 +14,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     if args.install_rules:
-        touched = install_workspace_rules()
+        touched = install_workspace_rules(workspace_dir=args.workspace)
         if args.compact:
             print(f"TokenLens rules={'installed' if touched else 'unchanged'}")
         else:

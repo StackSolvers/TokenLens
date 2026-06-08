@@ -50,7 +50,7 @@ No Python package installation is required.
 Copy this into your AI coding agent:
 
 ```text
-Set up TokenLens locally for this workspace: clone https://github.com/StackSolvers/TokenLens.git if needed, run `python <TokenLens>/cli.py --compact`, run `python <TokenLens>/cli.py --install-rules`, then start `python <TokenLens>/server.py`. Keep output concise and do not add telemetry or external model API calls.
+Set up TokenLens for this workspace: clone https://github.com/StackSolvers/TokenLens.git if needed. From this workspace, run `python <TokenLens>/cli.py --compact`, then `python <TokenLens>/cli.py --install-rules --workspace .`. You may open the dashboard for setup or inspection, but after each turn append the compact CLI/MCP TokenLens line, not dashboard output. Keep it local; add no telemetry.
 ```
 
 ### Manual Setup
@@ -62,12 +62,13 @@ python cli.py --compact
 python server.py
 ```
 
-Open the local URL printed by the server. It starts at `http://127.0.0.1:8080` and falls back to the next free port if needed.
+The server opens the dashboard locally by default. It starts at `http://127.0.0.1:8080` and falls back to the next free port if needed.
 
 ## Dashboard
 
 ```powershell
 python server.py
+python server.py --no-browser
 ```
 
 The dashboard shows rolling local usage windows, top projects, top models, sessions, and individual chat/model calls. Charts are local and interactive; hover points and slices to inspect values.
@@ -101,16 +102,18 @@ The tool returns one compact line and does not trigger other tools.
 TokenLens is designed to give agents a tiny, useful footer without flooding the conversation. Install the workspace guidance:
 
 ```powershell
-python cli.py --install-rules
+python cli.py --install-rules --workspace .
 ```
 
-This adds a short TokenLens instruction to supported agent rule files in the current workspace. The instruction tells the agent to run the compact check exactly once at the end of each turn and append only the one-line result:
+Run the command from the project you want the agent to work in, or pass an absolute path after `--workspace`. This adds a short TokenLens instruction to common agent rule files in that workspace, including `.airules`, `.cursorrules`, `.clinerules`, `AGENTS.md`, `CLAUDE.md`, and `GEMINI.md`. The instruction tells the agent to run the compact check exactly once at the end of each turn and append only the one-line result:
 
 ```text
 TokenLens | Codex | session 12.4M | last 135.2k | 5h 48.6M | 24h 210.4M | estimated
 ```
 
 The `5h` and `24h` values are rolling local estimates for the current/latest agent. They are not provider-confirmed remaining allowance.
+
+The dashboard is for human inspection. Agents should use the compact CLI or MCP tool for turn summaries, not the dashboard after each chat.
 
 Agents working inside this repository can also follow [AGENTS.md](AGENTS.md), which contains the same compact, low-noise operating rule.
 

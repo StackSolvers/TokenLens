@@ -31,4 +31,5 @@ Rules:
 - Run the check once per turn, at the end.
 - Keep the footer as one line.
 - Treat `5h` and `24h` as local rolling estimates, not provider-confirmed remaining allowance.
+- The dashboard may be opened for setup or human inspection, but never use dashboard output for routine turn summaries.
 - Do not call external model APIs for metering.

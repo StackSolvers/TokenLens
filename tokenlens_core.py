@@ -1100,7 +1100,8 @@ def tokenlens_rule_section(cli):
         f"python \"{cli}\" --compact\n"
         "Append only the returned one-line TokenLens summary. It reports current/latest session tokens (`session`), "
         "last chat tokens (`last`), and estimated current-agent rolling 5-hour and 24-hour usage. "
-        "Do not expand it unless asked.\n"
+        "Do not expand it unless asked. The dashboard may be opened for setup or human inspection, "
+        "but never use dashboard output for routine turn summaries.\n"
     )
 
 
@@ -1141,7 +1142,7 @@ def install_workspace_rules(workspace_dir=None, cli_path=None):
                 touched.append(str(path))
         except Exception:
             pass
-    for filename in ["AGENTS.md", "GEMINI.md"]:
+    for filename in ["AGENTS.md", "CLAUDE.md", "GEMINI.md"]:
         path = workspace / filename
         try:
             if path.exists():
@@ -1150,6 +1151,9 @@ def install_workspace_rules(workspace_dir=None, cli_path=None):
                 if new_content != content:
                     path.write_text(new_content, encoding="utf-8")
                     touched.append(str(path))
+            else:
+                path.write_text("# Agent Rules" + rule_section, encoding="utf-8")
+                touched.append(str(path))
         except Exception:
             pass
     return touched
@@ -1161,5 +1165,6 @@ def cli_arg_parser():
     parser.add_argument("--compact", action="store_true", help="Print a one-line agent-safe summary.")
     parser.add_argument("--json", action="store_true", help="Print normalized usage JSON.")
     parser.add_argument("--install-rules", action="store_true", help="Install token status guidance into workspace rules.")
+    parser.add_argument("--workspace", help="Workspace directory for --install-rules. Defaults to the current directory.")
     parser.add_argument("--config", help="Path to config.json.")
     return parser

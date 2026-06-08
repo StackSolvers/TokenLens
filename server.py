@@ -1,4 +1,5 @@
 import http.server
+import argparse
 import json
 import os
 import socketserver
@@ -71,6 +72,10 @@ def start_server():
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Run the local TokenLens dashboard server.")
+    parser.add_argument("--no-browser", action="store_true", help="Start the server without opening a browser.")
+    args = parser.parse_args()
+
     try:
         httpd, port = create_server()
     except Exception as exc:
@@ -79,7 +84,7 @@ if __name__ == "__main__":
 
     url = f"http://{HOST}:{port}"
     print(f"Serving at {url}", flush=True)
-    if not os.environ.get("TOKENLENS_NO_BROWSER"):
+    if not args.no_browser and not os.environ.get("TOKENLENS_NO_BROWSER"):
         time.sleep(1)
         webbrowser.open(url)
 
