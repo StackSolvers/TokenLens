@@ -1,25 +1,8 @@
 {
   "antigravity_dir": "",
-  "pricing": {
-    "mode": "known_only",
-    "default_input_per_1m": null,
-    "default_output_per_1m": null
-  },
-  "billing": {
-    "agents": {
-      "antigravity": "subscription",
-      "claude_code": "subscription",
-      "codex": "subscription",
-      "cline": "recorded_or_metered"
-    },
-    "model_prices": {}
-  },
   "display": {
     "show_last_turn": true,
     "show_cached_percentage": true
-  },
-  "dashboard": {
-    "live_pricing": false
   },
   "agents": {
     "antigravity": true,

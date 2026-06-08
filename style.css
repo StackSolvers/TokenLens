@@ -430,7 +430,6 @@ input:focus, select:focus {
 .input-icon { background: linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%); }
 .output-icon { background: linear-gradient(135deg, #84fab0 0%, #8fd3f4 100%); }
 .total-icon { background: var(--accent-gradient); }
-.cost-icon { background: linear-gradient(135deg, #f6d365 0%, #fda085 100%); }
 
 .metric-info h3 {
     font-size: 14px;
@@ -934,32 +933,6 @@ input:focus, select:focus {
 
 .input-with-button input {
     flex: 1;
-}
-
-.rate-inputs {
-    display: flex;
-    gap: 16px;
-}
-
-.input-col {
-    flex: 1;
-}
-
-.currency-input {
-    position: relative;
-    display: flex;
-    align-items: center;
-}
-
-.currency-symbol {
-    position: absolute;
-    left: 12px;
-    color: var(--text-secondary);
-}
-
-.currency-input input {
-    width: 100%;
-    padding-left: 24px;
 }
 
 .mt-2 {

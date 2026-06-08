@@ -2,142 +2,10 @@ let rawData = [];
 let filteredData = [];
 let rawChats = [];
 let filteredChats = [];
-let agentData = [];
-let rateInput = null;
-let rateOutput = null;
 let charts = {};
 let chartMeta = {};
-let priceMap = {};
-let serverConfig = {};
 let latestScope = { agent: '', project: '' };
 let hasUserFilterInteraction = false;
-
-async function fetchLivePricing() {
-    try {
-        const orRes = await fetch('https://openrouter.ai/api/v1/models');
-        if (orRes.ok) {
-            const orData = await orRes.json();
-            orData.data.forEach(m => {
-                if (m.pricing && m.pricing.prompt && m.pricing.completion) {
-                    const rate = {
-                        in: parseFloat(m.pricing.prompt) * 1000000,
-                        out: parseFloat(m.pricing.completion) * 1000000,
-                        cache: parseFloat(m.pricing.prompt) * 1000000 * 0.25,
-                        cacheWrite: parseFloat(m.pricing.prompt) * 1000000,
-                        source: 'OpenRouter live catalog'
-                    };
-                    registerPriceKeys(m.id, rate);
-                }
-            });
-        }
-    } catch (e) {
-        console.warn('Failed to fetch OpenRouter pricing', e);
-    }
-
-    try {
-        const llRes = await fetch('https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json');
-        if (llRes.ok) {
-            const llData = await llRes.json();
-            Object.keys(llData).forEach(key => {
-                const m = llData[key];
-                if (m.input_cost_per_token && m.output_cost_per_token) {
-                    const rate = {
-                            in: m.input_cost_per_token * 1000000,
-                            out: m.output_cost_per_token * 1000000,
-                            cache: m.input_cost_per_token * 1000000 * 0.25,
-                            cacheWrite: m.input_cost_per_token * 1000000,
-                            source: 'LiteLLM public catalog'
-                        };
-                    registerPriceKeys(key, rate, false);
-                }
-            });
-        }
-    } catch (e) {
-        console.warn('Failed to fetch LiteLLM pricing', e);
-    }
-}
-
-function registerPriceKeys(modelId, rate, overwrite = true) {
-    if (!modelId) return;
-    const keys = new Set();
-    const normalized = normalizeModelName(modelId);
-    keys.add(normalized);
-    keys.add(normalized.split('/').pop());
-    keys.add(normalized.replace(/-latest$/, ''));
-    keys.add(normalized.replace(/-\d{4}-\d{2}-\d{2}$/, ''));
-    keys.forEach(key => {
-        if (key && (overwrite || !priceMap[key])) priceMap[key] = rate;
-    });
-}
-
-function loadConfiguredPrices(config) {
-    priceMap = {};
-    const prices = ((config.billing || {}).model_prices) || {};
-    Object.keys(prices).forEach(key => {
-        const p = prices[key] || {};
-        const input = toPriceNumber(p.input_per_1m);
-        const output = toPriceNumber(p.output_per_1m);
-        if (input === null || output === null) return;
-        const cachedInput = toPriceNumber(p.cached_input_per_1m);
-        const cacheWrite = toPriceNumber(p.cache_write_per_1m);
-        registerPriceKeys(key, {
-            in: input,
-            out: output,
-            cache: cachedInput ?? input,
-            cacheWrite: cacheWrite ?? input,
-            source: p.source || 'config'
-        });
-    });
-}
-
-function toPriceNumber(value) {
-    if (value === null || value === undefined || value === '') return null;
-    const parsed = Number(value);
-    return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
-}
-
-function normalizeModelName(modelName) {
-    return String(modelName || '')
-        .replace(/^models\//, '')
-        .replace(/^openai\//, '')
-        .trim()
-        .toLowerCase();
-}
-
-function getAgentBillingMode(agent) {
-    const modes = (((serverConfig || {}).billing || {}).agents) || {};
-    return modes[agent] || 'recorded_or_metered';
-}
-
-function getModelCostRate(modelName, agent) {
-    const mode = getAgentBillingMode(agent);
-    if (mode === 'subscription' || mode === 'free' || mode === 'unmetered') return null;
-    if (!modelName) return getFallbackRates();
-    let normalized = normalizeModelName(modelName);
-    if (priceMap[normalized]) return priceMap[normalized];
-    if (priceMap[normalized.split('/').pop()]) return priceMap[normalized.split('/').pop()];
-    const dateSnapshotBase = normalized.replace(/-\d{4}-\d{2}-\d{2}$/, '');
-    if (priceMap[dateSnapshotBase]) return priceMap[dateSnapshotBase];
-    return getFallbackRates();
-}
-
-function getFallbackRates() {
-    const pricingMode = ((serverConfig || {}).pricing || {}).mode || 'known_only';
-    if (pricingMode !== 'fallback') return null;
-    let savedRates = localStorage.getItem('tokenlens_rates');
-    if (savedRates) {
-        try {
-            const parsed = JSON.parse(savedRates);
-            const input = toPriceNumber(parsed.input);
-            const output = toPriceNumber(parsed.output);
-            if (input !== null && output !== null) {
-                return { in: input, out: output, cache: input * 0.25, cacheWrite: input, source: 'local fallback' };
-            }
-        } catch (e) {}
-    }
-    if (rateInput === null || rateOutput === null) return null;
-    return { in: rateInput, out: rateOutput, cache: rateInput * 0.25, cacheWrite: rateInput, source: 'configured fallback' };
-}
 
 const formatNumber = (num) => new Intl.NumberFormat('en-US').format(Math.round(num || 0));
 const formatTokens = (num) => {
@@ -274,27 +142,6 @@ function applyQuickFilter(range) {
 }
 
 function setupSettings() {
-    const savedRates = localStorage.getItem('tokenlens_rates');
-    if (savedRates) {
-        try {
-            const r = JSON.parse(savedRates);
-            rateInput = r.input ?? null;
-            rateOutput = r.output ?? null;
-            document.getElementById('rate-input').value = rateInput ?? '';
-            document.getElementById('rate-output').value = rateOutput ?? '';
-        } catch (e) {}
-    }
-
-    document.getElementById('save-rates-btn').addEventListener('click', () => {
-        const inputValue = document.getElementById('rate-input').value;
-        const outputValue = document.getElementById('rate-output').value;
-        rateInput = inputValue === '' ? null : parseFloat(inputValue);
-        rateOutput = outputValue === '' ? null : parseFloat(outputValue);
-        localStorage.setItem('tokenlens_rates', JSON.stringify({ input: rateInput, output: rateOutput }));
-        updateMetrics();
-        renderProjectsTable();
-    });
-
     document.getElementById('save-path-btn').addEventListener('click', () => {
         const path = document.getElementById('custom-path').value;
         fetchData(path);
@@ -322,16 +169,8 @@ async function fetchData(customPath = null) {
         if (!res.ok) throw new Error(`Server returned ${res.status}`);
         const data = await res.json();
 
-        serverConfig = data.config || {};
-        applyServerConfig(serverConfig);
-
-        if (serverConfig.dashboard && serverConfig.dashboard.live_pricing) {
-            await fetchLivePricing();
-        }
-
         rawData = processRawData(data.sessions || []);
         rawChats = processRawChats(rawData);
-        agentData = data.agents || buildAgentData(rawData);
 
         populateProjectFilter();
         populateAgentFilter();
@@ -370,16 +209,6 @@ function setupResizeRedraw() {
     });
 }
 
-function applyServerConfig(config) {
-    loadConfiguredPrices(config);
-    if (config.pricing && !localStorage.getItem('tokenlens_rates')) {
-        rateInput = config.pricing.default_input_per_1m ?? rateInput;
-        rateOutput = config.pricing.default_output_per_1m ?? rateOutput;
-        document.getElementById('rate-input').value = rateInput ?? '';
-        document.getElementById('rate-output').value = rateOutput ?? '';
-    }
-}
-
 function processRawData(sessions) {
     return sessions.map(s => {
         const gens = s.generations || [];
@@ -409,7 +238,6 @@ function processRawData(sessions) {
             reasoningTokens,
             totalTokens,
             activeTokens,
-            cost: totals.cost,
             generations: gens
         };
     }).sort((a, b) => new Date(b.endTime || b.time || 0) - new Date(a.endTime || a.time || 0));
@@ -435,7 +263,6 @@ function processRawChats(sessions) {
                 reasoningTokens: g.reasoning_tokens || 0,
                 totalTokens: generationTotal(g),
                 activeTokens: generationActive(g),
-                cost: g.cost,
                 confidence: g.confidence || 'exact'
             });
         });
@@ -453,25 +280,6 @@ function generationActive(g) {
 
 function sum(rows, key) {
     return rows.reduce((acc, row) => acc + (row[key] || 0), 0);
-}
-
-function buildAgentData(sessions) {
-    const map = {};
-    sessions.forEach(s => {
-        const key = s.agent;
-        if (!map[key]) {
-            map[key] = { agent: s.agent, agent_name: s.agentName, sessions: 0, chats: 0, input_tokens: 0, cached_tokens: 0, cache_write_tokens: 0, output_tokens: 0, total_tokens: 0, active_tokens: 0 };
-        }
-        map[key].sessions += 1;
-        map[key].chats += s.generations.length;
-        map[key].input_tokens += s.inTokens;
-        map[key].cached_tokens += s.cachedTokens;
-        map[key].cache_write_tokens += s.cacheWriteTokens;
-        map[key].output_tokens += s.outTokens;
-        map[key].total_tokens += s.totalTokens;
-        map[key].active_tokens += s.activeTokens;
-    });
-    return Object.values(map);
 }
 
 function populateProjectFilter() {
@@ -613,7 +421,7 @@ function renderProjectsTable() {
     filteredData.forEach(s => {
         const key = `${s.agent}::${s.project}`;
         if (!projMap[key]) {
-            projMap[key] = { name: s.project, agent: s.agent, agentName: s.agentName, sessions: 0, chats: 0, input: 0, cached: 0, cacheWrites: 0, output: 0, active: 0, total: 0, cost: emptyCostDetail() };
+            projMap[key] = { name: s.project, agent: s.agent, agentName: s.agentName, sessions: 0, chats: 0, input: 0, cached: 0, cacheWrites: 0, output: 0, active: 0, total: 0 };
         }
         const bucket = projMap[key];
         bucket.sessions += 1;
@@ -624,7 +432,6 @@ function renderProjectsTable() {
         bucket.output += s.outTokens;
         bucket.active += s.activeTokens;
         bucket.total += s.totalTokens;
-        bucket.cost = mergeCostDetail(bucket.cost, sessionCostDetail(s));
     });
 
     const tbody = document.getElementById('projects-table-body');
@@ -641,7 +448,6 @@ function renderProjectsTable() {
         addCell(tr, formatNumber(p.cacheWrites), 'success-cell');
         addCell(tr, formatNumber(p.output));
         addCell(tr, formatNumber(p.active), 'strong-cell');
-        addCell(tr, formatCostDetail(p.cost), p.cost.amount > 0 ? 'success-cell' : '');
         tr.addEventListener('click', () => {
             hasUserFilterInteraction = true;
             document.getElementById('project-filter').value = p.name;
@@ -693,14 +499,12 @@ function updateMetrics() {
     let totCached = 0;
     let totCacheWrites = 0;
     let totOut = 0;
-    let totalCost = emptyCostDetail();
 
     filteredData.forEach(s => {
         totIn += s.inTokens;
         totCached += s.cachedTokens;
         totCacheWrites += s.cacheWriteTokens;
         totOut += s.outTokens;
-        totalCost = mergeCostDetail(totalCost, sessionCostDetail(s));
     });
 
     const tot = filteredData.reduce((acc, s) => acc + s.activeTokens, 0);
@@ -708,70 +512,6 @@ function updateMetrics() {
     setText("val-cached-tokens", formatNumber(totCached + totCacheWrites));
     setText("val-output-tokens", formatNumber(totOut));
     setText("val-total-tokens", formatNumber(tot));
-    setText('val-cost', formatCostDetail(totalCost));
-}
-
-function emptyCostDetail() {
-    return { amount: 0, pricedTokens: 0, unpricedTokens: 0, pricedChats: 0, unpricedChats: 0, sources: new Set() };
-}
-
-function mergeCostDetail(a, b) {
-    const merged = emptyCostDetail();
-    merged.amount = (a.amount || 0) + (b.amount || 0);
-    merged.pricedTokens = (a.pricedTokens || 0) + (b.pricedTokens || 0);
-    merged.unpricedTokens = (a.unpricedTokens || 0) + (b.unpricedTokens || 0);
-    merged.pricedChats = (a.pricedChats || 0) + (b.pricedChats || 0);
-    merged.unpricedChats = (a.unpricedChats || 0) + (b.unpricedChats || 0);
-    [...(a.sources || []), ...(b.sources || [])].forEach(source => merged.sources.add(source));
-    return merged;
-}
-
-function sessionCostDetail(s) {
-    if (s.cost !== null && s.cost !== undefined) {
-        const detail = emptyCostDetail();
-        detail.amount = Number(s.cost) || 0;
-        detail.pricedTokens = s.totalTokens || 0;
-        detail.pricedChats = s.generations.length || 1;
-        detail.sources.add('recorded session cost');
-        return detail;
-    }
-    return (s.generations || []).reduce((acc, g) => mergeCostDetail(acc, generationCostDetail(g, s.agent)), emptyCostDetail());
-}
-
-function generationCostDetail(g, agent) {
-    const totalTokens = generationTotal(g);
-    const detail = emptyCostDetail();
-    if (g.cost !== null && g.cost !== undefined) {
-        detail.amount = Number(g.cost) || 0;
-        detail.pricedTokens = totalTokens;
-        detail.pricedChats = 1;
-        detail.sources.add('recorded call cost');
-        return detail;
-    }
-    const rates = getModelCostRate(g.model, agent);
-    if (!rates) {
-        detail.unpricedTokens = totalTokens;
-        detail.unpricedChats = 1;
-        return detail;
-    }
-    detail.amount = (((g.input_tokens || 0) / 1000000) * rates.in) +
-        (((g.cached_tokens || 0) / 1000000) * rates.cache) +
-        (((g.cache_write_tokens || 0) / 1000000) * rates.cacheWrite) +
-        (((g.output_tokens || 0) / 1000000) * rates.out);
-    detail.pricedTokens = totalTokens;
-    detail.pricedChats = 1;
-    detail.sources.add(rates.source || 'price catalog');
-    return detail;
-}
-
-function formatCostDetail(detail) {
-    if (!detail || detail.pricedTokens === 0) return 'N/A';
-    const coverageRaw = detail.pricedTokens + detail.unpricedTokens > 0
-        ? (detail.pricedTokens / (detail.pricedTokens + detail.unpricedTokens)) * 100
-        : 100;
-    const coverage = coverageRaw > 0 && coverageRaw < 1 ? '<1' : String(Math.round(coverageRaw));
-    const suffix = coverageRaw < 100 ? ` (${coverage}% priced)` : '';
-    return '$' + detail.amount.toFixed(2) + suffix;
 }
 
 function updateCharts() {

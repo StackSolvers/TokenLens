@@ -18,26 +18,9 @@ AGENT_NAMES = {
 
 DEFAULT_CONFIG = {
     "antigravity_dir": "",
-    "pricing": {
-        "mode": "known_only",
-        "default_input_per_1m": None,
-        "default_output_per_1m": None,
-    },
-    "billing": {
-        "agents": {
-            "antigravity": "subscription",
-            "claude_code": "subscription",
-            "codex": "subscription",
-            "cline": "recorded_or_metered",
-        },
-        "model_prices": {},
-    },
     "display": {
         "show_last_turn": True,
         "show_cached_percentage": True,
-    },
-    "dashboard": {
-        "live_pricing": False,
     },
     "agents": {
         "antigravity": True,
@@ -210,7 +193,6 @@ def make_generation(
     output_tokens=0,
     reasoning_tokens=0,
     total_tokens=None,
-    cost=None,
     source_path="",
     confidence="exact",
 ):
@@ -235,7 +217,6 @@ def make_generation(
         "reasoning_tokens": reasoning_tokens,
         "total_tokens": int(total_tokens if total_tokens is not None else calculated),
         "active_tokens": active,
-        "cost": cost,
         "source_path": source_path,
         "confidence": confidence,
     }
@@ -271,22 +252,12 @@ def finalize_session(session):
         "reasoning_tokens": 0,
         "total_tokens": 0,
         "active_tokens": 0,
-        "cost": 0.0,
     }
-    cost_seen = False
     for gen in session.get("generations", []):
         for key in ("input_tokens", "cached_tokens", "cache_write_tokens", "output_tokens", "reasoning_tokens"):
             total[key] += int(gen.get(key) or 0)
         total["total_tokens"] += int(gen.get("total_tokens") or usage_total(gen))
         total["active_tokens"] += int(gen.get("active_tokens") or usage_active(gen))
-        if gen.get("cost") is not None:
-            cost_seen = True
-            try:
-                total["cost"] += float(gen.get("cost") or 0)
-            except Exception:
-                pass
-    if not cost_seen:
-        total["cost"] = None
     session["totals"] = total
     session["chat_count"] = len(session.get("generations", []))
     return session
@@ -826,18 +797,13 @@ def collect_cline(config):
                     req = json.loads(item.get("text") or "{}")
                 except Exception:
                     continue
-                if not any(k in req for k in ("tokensIn", "tokensOut", "cacheReads", "cacheWrites", "cost")):
+                if not any(k in req for k in ("tokensIn", "tokensOut", "cacheReads", "cacheWrites")):
                     continue
                 input_tokens = int(req.get("tokensIn") or 0)
                 cached_tokens = int(req.get("cacheReads") or 0)
                 cache_write_tokens = int(req.get("cacheWrites") or 0)
                 output_tokens = int(req.get("tokensOut") or 0)
                 total_tokens = input_tokens + cached_tokens + cache_write_tokens + output_tokens
-                cost = req.get("cost")
-                try:
-                    cost = float(cost) if cost is not None else None
-                except Exception:
-                    cost = None
                 generations.append(
                     make_generation(
                         "cline",
@@ -850,7 +816,6 @@ def collect_cline(config):
                         cache_write_tokens=cache_write_tokens,
                         output_tokens=output_tokens,
                         total_tokens=total_tokens,
-                        cost=cost,
                         source_path=ui_path,
                     )
                 )

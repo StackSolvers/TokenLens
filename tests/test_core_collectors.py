@@ -155,7 +155,7 @@ class CollectorTests(unittest.TestCase):
                             "say": "api_req_started",
                             "ts": 1778616792744,
                             "modelInfo": {"modelId": "cline-model"},
-                            "text": json.dumps({"tokensIn": 7, "tokensOut": 8, "cacheReads": 9, "cacheWrites": 10, "cost": 0.12}),
+                            "text": json.dumps({"tokensIn": 7, "tokensOut": 8, "cacheReads": 9, "cacheWrites": 10}),
                         },
                     ]
                 ),

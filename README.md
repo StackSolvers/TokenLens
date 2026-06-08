@@ -13,7 +13,6 @@ Use it when you want a clear answer to:
 - How many active tokens did the current agent session use?
 - Which projects, chats, and models are driving usage?
 - What happened in the last 5 hours, 24 hours, 7 days, and 30 days?
-- Which costs are recorded or backed by configured model pricing?
 
 ## Features
 
@@ -23,8 +22,7 @@ Use it when you want a clear answer to:
 - Compact MCP and CLI summaries designed for agent-safe footer updates.
 - Interactive local dashboard with active rolling usage cards and charts.
 - Local dashboard served on `127.0.0.1`.
-- No default telemetry, uploads, or remote pricing calls.
-- Cost reporting uses recorded or known model prices only by default.
+- No telemetry, uploads, or remote calls.
 
 ## Supported Sources
 
@@ -157,39 +155,12 @@ $env:TOKENLENS_HOOK_VERBOSE = "1"
 - TokenLens reads local files only.
 - SQLite connections use read-only mode.
 - The dashboard binds to `127.0.0.1`.
-- Live pricing network calls are disabled by default.
-- Set `dashboard.live_pricing` to `true` in `config.json` only if you want browser-side pricing metadata from OpenRouter and LiteLLM.
-- Subscription/free-plan usage is shown as tokens, not converted into fake API cost.
+- TokenLens reports token usage only.
 
 ## Config
 
 ```json
 {
-  "dashboard": {
-    "live_pricing": false
-  },
-  "pricing": {
-    "mode": "known_only",
-    "default_input_per_1m": null,
-    "default_output_per_1m": null
-  },
-  "billing": {
-    "agents": {
-      "antigravity": "subscription",
-      "claude_code": "subscription",
-      "codex": "subscription",
-      "cline": "recorded_or_metered"
-    },
-    "model_prices": {
-      "provider/model-name": {
-        "input_per_1m": 1.25,
-        "cached_input_per_1m": 0.125,
-        "cache_write_per_1m": 1.25,
-        "output_per_1m": 10.0,
-        "source": "Pricing page URL or billing contract"
-      }
-    }
-  },
   "agents": {
     "antigravity": true,
     "claude_code": true,
@@ -209,56 +180,12 @@ $env:TOKENLENS_HOOK_VERBOSE = "1"
 
 TokenLens does not silently query provider servers for real remaining allowance. It reports local rolling usage windows instead.
 
-## Pricing Accuracy
-
-TokenLens separates token usage from billing.
-
-- Exact token usage can be shown for supported local logs.
-- Dollar cost is shown only for calls with recorded cost or configured/live model pricing.
-- Unknown, flat-plan, subscription, and free-plan usage is left as `N/A` for cost.
-- Different models must have different entries in `billing.model_prices`; for example, `gpt-4.4` and `gpt-5.5` should be configured separately if both are metered in your account.
-
-For credible public pricing, check the model provider's current pricing page or your actual billing contract. Public model prices change over time, and flat plans do not map cleanly to API token pricing.
-
-Recommended pricing sources:
-
-- OpenAI API pricing and model pages: <https://openai.com/api/pricing/>
-- Anthropic Claude API pricing: <https://platform.claude.com/docs/en/about-claude/pricing>
-- Google Gemini API pricing: <https://ai.google.dev/gemini-api/docs/pricing>
-- Your provider invoice, billing export, or enterprise contract.
-
-OpenRouter and LiteLLM live catalogs can be useful when calls are actually routed through those services. They should not be treated as proof of direct OpenAI, Anthropic, Google, subscription, or enterprise-plan billing.
-
-Example for a metered OpenAI API model, not a flat ChatGPT/Codex subscription. Verify the provider page before relying on these values for budgets:
-
-```json
-{
-  "billing": {
-    "agents": {
-      "codex": "recorded_or_metered"
-    },
-    "model_prices": {
-      "gpt-5.5": {
-        "input_per_1m": 5.0,
-        "cached_input_per_1m": 0.5,
-        "cache_write_per_1m": 5.0,
-        "output_per_1m": 30.0,
-        "source": "https://openai.com/api/pricing/"
-      }
-    }
-  }
-}
-```
-
-Keep separate entries for different models. Do not reuse one model's price for another model.
-
 ## Verification
 
 ```powershell
 python -m unittest discover -s tests
 python -m py_compile tokenlens_core.py cli.py server.py mcp_server.py hook.py
 node --check app.js
-node tests/test_dashboard_pricing.js
 ```
 
 ## License

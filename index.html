@@ -188,16 +188,6 @@
                             <div class="metric-value" id="val-total-tokens">0</div>
                         </div>
                     </div>
-                    <div class="metric-card glass-card">
-                        <div class="metric-icon cost-icon">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
-                        </div>
-                        <div class="metric-content">
-                            <h3>Metered Cost</h3>
-                            <div class="metric-value" id="val-cost">N/A</div>
-                            <div class="metric-trend" style="font-size: 11px;">Known or recorded prices only</div>
-                        </div>
-                    </div>
                 </div>
 
                 <!-- Charts -->
@@ -266,7 +256,7 @@
                 <div class="glass-card full-height-card">
                     <div class="card-header">
                         <h2>Project Usage Breakdown</h2>
-                        <span style="font-size: 12px; color: var(--text-secondary);">Costs show only when priced or recorded</span>
+                        <span style="font-size: 12px; color: var(--text-secondary);">Active tokens exclude cached reads</span>
                     </div>
                     <div class="table-container" style="max-height: calc(100vh - 150px); overflow-y: auto;">
                         <table class="data-table">
@@ -281,7 +271,6 @@
                                     <th>Cache Writes</th>
                                     <th>Output Tokens</th>
                                     <th>Active Tokens</th>
-                                    <th>Metered Cost</th>
                                 </tr>
                             </thead>
                             <tbody id="projects-table-body">
@@ -365,28 +354,6 @@
                             <button id="save-path-btn" class="btn primary-btn">Apply</button>
                         </div>
                         <small>Other agents are auto-detected from local Claude Code, Codex, and Cline storage paths.</small>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Fallback API Rates</label>
-                        <div class="rate-inputs">
-                            <div class="input-col">
-                                <label for="rate-input">Input (per 1M tokens)</label>
-                                <div class="currency-input">
-                                    <span class="currency-symbol">$</span>
-                                    <input type="number" id="rate-input" placeholder="optional" step="0.01" min="0">
-                                </div>
-                            </div>
-                            <div class="input-col">
-                                <label for="rate-output">Output (per 1M tokens)</label>
-                                <div class="currency-input">
-                                    <span class="currency-symbol">$</span>
-                                    <input type="number" id="rate-output" placeholder="optional" step="0.01" min="0">
-                                </div>
-                            </div>
-                        </div>
-                        <button id="save-rates-btn" class="btn secondary-btn mt-2">Save Fallback Rates</button>
-                        <small>Disabled by default. Enable fallback mode only for metered API usage where one average rate is acceptable.</small>
                     </div>
                 </div>
             </div>
