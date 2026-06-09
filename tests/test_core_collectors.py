@@ -8,8 +8,10 @@ from tokenlens_core import (
     DEFAULT_CONFIG,
     collect_all_usage,
     compact_summary,
+    compact_summary_payload,
     deep_merge,
     finalize_session,
+    install_antigravity_mcp,
     install_workspace_rules,
     make_generation,
     make_session,
@@ -188,6 +190,16 @@ class CollectorTests(unittest.TestCase):
             self.assertIn("24h ", summary_line)
             self.assertTrue(summary_line.endswith("estimated"))
             self.assertNotIn("\n", summary_line)
+            payload = compact_summary_payload(data)
+            self.assertEqual(payload["line"], summary_line)
+            self.assertEqual(payload["agent_id"], "codex")
+            self.assertIn("rolling_5h_active_tokens", payload)
+
+            with EnvPatch(HOME=str(root), USERPROFILE=str(root), APPDATA=str(appdata), CODEX_HOME=str(root / ".codex")):
+                codex_only = collect_all_usage(config, only_agents="codex")
+            self.assertEqual(codex_only["summary"]["active_tokens"], 140)
+            self.assertEqual(codex_only["summary"]["sessions"], 1)
+            self.assertEqual(codex_only["summary"]["current_session"]["agent"], "codex")
 
     def test_install_workspace_rules_creates_common_agent_rule_files(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -199,7 +211,24 @@ class CollectorTests(unittest.TestCase):
                 self.assertIn(filename, touched_names)
                 content = (root / filename).read_text(encoding="utf-8")
                 self.assertIn("--compact", content)
+                self.assertIn("get_token_summary", content)
                 self.assertIn("never use dashboard output for routine turn summaries", content)
+                self.assertIn("Never run plain `python cli.py`", content)
+
+    def test_install_antigravity_mcp_writes_config_and_tool_metadata(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config_path = root / "mcp_config.json"
+            result = install_antigravity_mcp(config_path=config_path)
+
+            self.assertTrue(result["changed"])
+            data = json.loads(config_path.read_text(encoding="utf-8"))
+            entry = data["mcpServers"]["tokenlens"]
+            self.assertTrue(entry["args"][0].endswith("mcp_server.py"))
+            self.assertEqual(entry["args"][1:], ["--agent", "antigravity"])
+            self.assertTrue(Path(result["metadata_dir"], "get_token_summary.json").exists())
+            instructions = Path(result["metadata_dir"], "instructions.md").read_text(encoding="utf-8")
+            self.assertIn("do not run shell commands", instructions)
 
     def test_active_tokens_exclude_cached_reads_for_any_agent(self):
         session = make_session("antigravity", "ag-a", "Project", "Title")

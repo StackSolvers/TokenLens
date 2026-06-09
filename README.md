@@ -19,7 +19,7 @@ Use it when you want a clear answer to:
 - Multi-agent usage tracking for Antigravity, Claude Code, Codex, and Cline.
 - Breakdowns by agent, project, session, and individual chat/model call.
 - Read-only collectors for local logs and SQLite databases.
-- Compact MCP and CLI summaries designed for agent-safe footer updates.
+- Agent-scoped MCP and CLI summaries designed for low-latency footer updates.
 - Interactive local dashboard with active rolling usage cards and charts.
 - Local dashboard served on `127.0.0.1`.
 - No telemetry, uploads, or remote calls.
@@ -48,7 +48,7 @@ No Python package installation is required.
 Copy this into your AI coding agent:
 
 ```text
-Set up TokenLens for this workspace: clone https://github.com/StackSolvers/TokenLens.git if needed. From this workspace, run `python <TokenLens>/cli.py --compact`, then `python <TokenLens>/cli.py --install-rules --workspace .`. You may open the dashboard for setup or inspection, but after each turn append the compact CLI/MCP TokenLens line, not dashboard output. Keep it local; add no telemetry.
+Set up TokenLens for this workspace: clone https://github.com/StackSolvers/TokenLens.git if needed. Run `python <TokenLens>/cli.py --install-antigravity-mcp`, then `python <TokenLens>/cli.py --install-rules --workspace . --compact`. After each turn, prefer the `get_token_summary` MCP tool and append only its one-line result. Do not ask for shell approval every turn just to run TokenLens. Keep it local; add no telemetry.
 ```
 
 ### Manual Setup
@@ -57,6 +57,7 @@ Set up TokenLens for this workspace: clone https://github.com/StackSolvers/Token
 git clone https://github.com/StackSolvers/TokenLens.git
 cd TokenLens
 python cli.py --compact
+python cli.py --install-antigravity-mcp
 python server.py
 ```
 
@@ -89,7 +90,10 @@ This keeps long-context agents from looking far more expensive than they are whe
 ```powershell
 python cli.py
 python cli.py --compact
+python cli.py --verbose
 python cli.py --json
+python cli.py --compact --json
+python cli.py --compact --agent antigravity
 ```
 
 Example compact output:
@@ -98,25 +102,33 @@ Example compact output:
 TokenLens | Codex | active | session 2.5M | last 4.8k | 5h 418.1k | 24h 2.5M | estimated
 ```
 
+`python cli.py` defaults to the compact one-line output. Use `--verbose` for the multi-line human summary. Use `--compact --json` for a tiny structured payload suitable for agents. Use `--agent antigravity`, `--agent codex`, `--agent claude_code`, or `--agent cline` to limit collection to one agent.
+
 ## MCP Tool
 
-Configure `mcp_server.py` as a stdio MCP server and call:
+For Antigravity, install the MCP server once:
+
+```powershell
+python cli.py --install-antigravity-mcp
+```
+
+Restart Antigravity after installing or updating MCP configuration. Then call:
 
 ```text
 get_token_summary
 ```
 
-The tool returns one compact line and does not trigger other tools.
+The installed Antigravity MCP server defaults to `--agent antigravity`, so routine footers do not scan unrelated Codex, Claude Code, or Cline history. The tool returns one compact line, uses in-process file caching while the MCP server is alive, and does not trigger other tools. It also accepts `{"format":"json"}` for minimal structured output or `{"agent":"all"}` when you explicitly want a cross-agent summary.
 
 ## Use With AI Agents
 
 TokenLens is designed to give agents a tiny, useful footer without flooding the conversation. Install the workspace guidance:
 
 ```powershell
-python cli.py --install-rules --workspace .
+python cli.py --install-rules --workspace . --compact
 ```
 
-Run the command from the project you want the agent to work in, or pass an absolute path after `--workspace`. This adds a short TokenLens instruction to common agent rule files in that workspace, including `.airules`, `.cursorrules`, `.clinerules`, `AGENTS.md`, `CLAUDE.md`, and `GEMINI.md`. The instruction tells the agent to run the compact check exactly once at the end of each turn and append only the one-line result:
+Run the command from the project you want the agent to work in, or pass an absolute path after `--workspace`. This adds a short TokenLens instruction to common agent rule files in that workspace, including `.airules`, `.cursorrules`, `.clinerules`, `AGENTS.md`, `CLAUDE.md`, and `GEMINI.md`. The instruction tells the agent to prefer the MCP tool, avoid repeated shell approval prompts, and append only the one-line result:
 
 ```text
 TokenLens | Codex | active | session 2.5M | last 4.8k | 5h 418.1k | 24h 2.5M | estimated
@@ -124,7 +136,7 @@ TokenLens | Codex | active | session 2.5M | last 4.8k | 5h 418.1k | 24h 2.5M | e
 
 The compact footer reports active tokens. Cached reads are tracked separately in the dashboard and JSON output, but excluded from the footer so context-cache replay does not look like fresh burn. The `5h` and `24h` values are rolling local estimates for the current/latest agent. They are not provider-confirmed remaining allowance.
 
-The dashboard is for human inspection. Agents should use the compact CLI or MCP tool for turn summaries, not the dashboard after each chat.
+The dashboard is for human inspection. Agents should use the MCP tool for turn summaries when available. The CLI is a fallback for manual use or already-approved shell contexts, not something an agent should ask to run every turn.
 
 Agents working inside this repository can also follow [AGENTS.md](AGENTS.md), which contains the same compact, low-noise operating rule.
 

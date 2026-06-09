@@ -4,6 +4,7 @@ import glob
 import json
 import os
 import sqlite3
+import sys
 from pathlib import Path
 from urllib.parse import quote
 
@@ -35,6 +36,41 @@ DEFAULT_CONFIG = {
         "cline": [],
     },
 }
+
+AGENT_CHOICES = tuple(AGENT_NAMES.keys())
+_SESSION_CACHE = {}
+
+
+def normalize_agent_filter(only_agents=None):
+    if not only_agents or only_agents == "all":
+        return None
+    if isinstance(only_agents, str):
+        only_agents = [only_agents]
+    selected = {agent for agent in only_agents if agent in AGENT_NAMES}
+    return selected or None
+
+
+def file_cache_key(path, extra_paths=None):
+    parts = []
+    for item in [path] + list(extra_paths or []):
+        resolved = os.path.normcase(os.path.abspath(str(item)))
+        try:
+            stat = os.stat(resolved)
+            parts.append((resolved, stat.st_mtime_ns, stat.st_size))
+        except OSError:
+            parts.append((resolved, None, None))
+    return tuple(parts)
+
+
+def cached_file_result(path, builder, extra_paths=None):
+    key = file_cache_key(path, extra_paths)
+    cache_id = key[0][0]
+    cached = _SESSION_CACHE.get(cache_id)
+    if cached and cached.get("key") == key:
+        return cached.get("value")
+    value = builder()
+    _SESSION_CACHE[cache_id] = {"key": key, "value": value}
+    return value
 
 
 def deep_merge(base, override):
@@ -407,6 +443,101 @@ def antigravity_title_from_transcript(base_dir, conv_id, fallback):
     return fallback
 
 
+def parse_antigravity_session(base_dir, db_path, metadata):
+    conv_id = os.path.splitext(os.path.basename(db_path))[0]
+    pb_path = os.path.join(base_dir, "agyhub_summaries_proto.pb")
+    transcript_path = os.path.join(base_dir, "brain", conv_id, ".system_generated", "logs", "transcript.jsonl")
+
+    def build():
+        meta = metadata.get(conv_id, {})
+        project = meta.get("project") or "Unknown Project"
+        workspace_uri = ""
+        title = meta.get("title") or "Untitled"
+        generations = []
+
+        try:
+            with sqlite_connect_ro(db_path) as conn:
+                cursor = conn.cursor()
+                try:
+                    cursor.execute("SELECT data FROM trajectory_metadata_blob LIMIT 1;")
+                    row = cursor.fetchone()
+                    if row and row[0]:
+                        traj_fields = parse_proto(row[0])
+                        p_msg = get_submsg(traj_fields, 3)
+                        if p_msg:
+                            project = get_string(p_msg, 1) or project
+                        workspace_uri = get_string(traj_fields, 1) or ""
+                except Exception:
+                    pass
+
+                try:
+                    cursor.execute("SELECT idx, data FROM gen_metadata ORDER BY idx ASC;")
+                    rows = cursor.fetchall()
+                except Exception:
+                    rows = []
+
+                for idx, blob in rows:
+                    if not blob:
+                        continue
+                    fields = parse_proto(blob)
+                    model_fields = get_submsg(fields, 1)
+                    if not model_fields:
+                        continue
+                    model_name = get_string(model_fields, 19) or "Unknown Model"
+                    out_tokens = get_int(model_fields, 3) or 0
+                    usage_metadata = get_submsg(model_fields, 9)
+                    in_tokens = 0
+                    cached_tokens = 0
+                    timestamp_sec = None
+
+                    if usage_metadata:
+                        f10_msg = get_submsg(usage_metadata, 10)
+                        if f10_msg:
+                            in_tokens = get_int(f10_msg, 1) or 0
+                            for t3, val3 in get_field_values(f10_msg, 3):
+                                if t3 == 2:
+                                    f3_msg = parse_proto(val3)
+                                    for t1, val1 in get_field_values(f3_msg, 1):
+                                        if t1 == 2:
+                                            block = parse_proto(val1)
+                                            tok = get_int(block, 4) or 0
+                                            is_cached = get_int(block, 3) == 1
+                                            if is_cached:
+                                                cached_tokens += tok
+                            in_tokens = max(0, in_tokens - cached_tokens)
+
+                        f4_msg = get_submsg(usage_metadata, 4)
+                        if f4_msg:
+                            timestamp_sec = get_int(f4_msg, 1)
+
+                    generations.append(
+                        make_generation(
+                            "antigravity",
+                            conv_id,
+                            idx,
+                            timestamp=timestamp_sec,
+                            model=model_name,
+                            input_tokens=in_tokens,
+                            cached_tokens=cached_tokens,
+                            output_tokens=out_tokens,
+                            source_path=db_path,
+                        )
+                    )
+        except Exception:
+            return None
+
+        if not generations:
+            return None
+        if not project and workspace_uri:
+            project = project_name_from_path(workspace_uri)
+        title = antigravity_title_from_transcript(base_dir, conv_id, title)
+        session = make_session("antigravity", conv_id, project, title, source_path=db_path, project_path=workspace_uri)
+        session["generations"] = generations
+        return finalize_session(session)
+
+    return cached_file_result(db_path, build, extra_paths=[pb_path, transcript_path])
+
+
 def collect_antigravity(config, custom_path=None):
     sessions = []
     sources = []
@@ -422,94 +553,12 @@ def collect_antigravity(config, custom_path=None):
         root_chats = 0
 
         for db_path in db_files:
-            conv_id = os.path.splitext(os.path.basename(db_path))[0]
-            meta = metadata.get(conv_id, {})
-            project = meta.get("project") or "Unknown Project"
-            workspace_uri = ""
-            title = meta.get("title") or "Untitled"
-            generations = []
-
-            try:
-                with sqlite_connect_ro(db_path) as conn:
-                    cursor = conn.cursor()
-                    try:
-                        cursor.execute("SELECT data FROM trajectory_metadata_blob LIMIT 1;")
-                        row = cursor.fetchone()
-                        if row and row[0]:
-                            traj_fields = parse_proto(row[0])
-                            p_msg = get_submsg(traj_fields, 3)
-                            if p_msg:
-                                project = get_string(p_msg, 1) or project
-                            workspace_uri = get_string(traj_fields, 1) or ""
-                    except Exception:
-                        pass
-
-                    try:
-                        cursor.execute("SELECT idx, data FROM gen_metadata ORDER BY idx ASC;")
-                        rows = cursor.fetchall()
-                    except Exception:
-                        rows = []
-
-                    for idx, blob in rows:
-                        if not blob:
-                            continue
-                        fields = parse_proto(blob)
-                        model_fields = get_submsg(fields, 1)
-                        if not model_fields:
-                            continue
-                        model_name = get_string(model_fields, 19) or "Unknown Model"
-                        out_tokens = get_int(model_fields, 3) or 0
-                        usage_metadata = get_submsg(model_fields, 9)
-                        in_tokens = 0
-                        cached_tokens = 0
-                        timestamp_sec = None
-
-                        if usage_metadata:
-                            f10_msg = get_submsg(usage_metadata, 10)
-                            if f10_msg:
-                                in_tokens = get_int(f10_msg, 1) or 0
-                                for t3, val3 in get_field_values(f10_msg, 3):
-                                    if t3 == 2:
-                                        f3_msg = parse_proto(val3)
-                                        for t1, val1 in get_field_values(f3_msg, 1):
-                                            if t1 == 2:
-                                                block = parse_proto(val1)
-                                                tok = get_int(block, 4) or 0
-                                                is_cached = get_int(block, 3) == 1
-                                                if is_cached:
-                                                    cached_tokens += tok
-                                in_tokens = max(0, in_tokens - cached_tokens)
-
-                            f4_msg = get_submsg(usage_metadata, 4)
-                            if f4_msg:
-                                timestamp_sec = get_int(f4_msg, 1)
-
-                        generations.append(
-                            make_generation(
-                                "antigravity",
-                                conv_id,
-                                idx,
-                                timestamp=timestamp_sec,
-                                model=model_name,
-                                input_tokens=in_tokens,
-                                cached_tokens=cached_tokens,
-                                output_tokens=out_tokens,
-                                source_path=db_path,
-                            )
-                        )
-            except Exception:
+            session = parse_antigravity_session(base_dir, db_path, metadata)
+            if not session:
                 continue
-
-            if not generations:
-                continue
-            if not project and workspace_uri:
-                project = project_name_from_path(workspace_uri)
-            title = antigravity_title_from_transcript(base_dir, conv_id, title)
-            session = make_session("antigravity", conv_id, project, title, source_path=db_path, project_path=workspace_uri)
-            session["generations"] = generations
-            sessions.append(finalize_session(session))
+            sessions.append(session)
             root_sessions += 1
-            root_chats += len(generations)
+            root_chats += len(session.get("generations", []))
 
         sources.append({"agent": "antigravity", "path": base_dir, "status": "ok", "sessions": root_sessions, "chats": root_chats})
     return sessions, sources
@@ -538,6 +587,67 @@ def claude_roots(config):
     return unique_existing_dirs(paths)
 
 
+def parse_claude_session(path):
+    def build():
+        session_id = Path(path).stem
+        project_path = ""
+        project = project_name_from_path(Path(path).parent.name)
+        title = "Claude Code session"
+        usage_by_request = {}
+        order = []
+
+        for line_no, obj in iter_jsonl(path):
+            if not isinstance(obj, dict):
+                continue
+            if obj.get("cwd") and not project_path:
+                project_path = obj.get("cwd")
+                project = project_name_from_path(project_path, fallback=project)
+            if obj.get("sessionId"):
+                session_id = str(obj.get("sessionId"))
+            if obj.get("type") == "user" and title == "Claude Code session":
+                title = safe_title(extract_message_text(obj.get("message")), fallback=title)
+            if obj.get("type") != "assistant":
+                continue
+            message = obj.get("message") or {}
+            usage = message.get("usage") or {}
+            if not isinstance(usage, dict):
+                continue
+            request_id = obj.get("requestId") or obj.get("uuid") or f"{Path(path).name}:{line_no}"
+            input_tokens = int(usage.get("input_tokens") or 0)
+            cached_tokens = int(usage.get("cache_read_input_tokens") or 0)
+            cache_write_tokens = int(usage.get("cache_creation_input_tokens") or 0)
+            output_tokens = int(usage.get("output_tokens") or 0)
+            total_tokens = input_tokens + cached_tokens + cache_write_tokens + output_tokens
+            generation = make_generation(
+                "claude_code",
+                session_id,
+                request_id,
+                timestamp=obj.get("timestamp"),
+                model=message.get("model") or "Unknown Model",
+                input_tokens=input_tokens,
+                cached_tokens=cached_tokens,
+                cache_write_tokens=cache_write_tokens,
+                output_tokens=output_tokens,
+                total_tokens=total_tokens,
+                source_path=path,
+            )
+            old = usage_by_request.get(request_id)
+            if not old:
+                order.append(request_id)
+                usage_by_request[request_id] = generation
+            elif generation["total_tokens"] >= old["total_tokens"]:
+                usage_by_request[request_id] = generation
+
+        generations = [usage_by_request[key] for key in order if usage_by_request.get(key)]
+        if not generations:
+            return None
+        session = make_session("claude_code", session_id, project, title, source_path=path, project_path=project_path)
+        session["generations"] = generations
+        return finalize_session(session)
+
+    return cached_file_result(path, build)
+
+
 def collect_claude_code(config):
     sessions = []
     sources = []
@@ -546,63 +656,12 @@ def collect_claude_code(config):
         root_sessions = 0
         root_chats = 0
         for path in files:
-            session_id = Path(path).stem
-            project_path = ""
-            project = project_name_from_path(Path(path).parent.name)
-            title = "Claude Code session"
-            usage_by_request = {}
-            order = []
-
-            for line_no, obj in iter_jsonl(path):
-                if not isinstance(obj, dict):
-                    continue
-                if obj.get("cwd") and not project_path:
-                    project_path = obj.get("cwd")
-                    project = project_name_from_path(project_path, fallback=project)
-                if obj.get("sessionId"):
-                    session_id = str(obj.get("sessionId"))
-                if obj.get("type") == "user" and title == "Claude Code session":
-                    title = safe_title(extract_message_text(obj.get("message")), fallback=title)
-                if obj.get("type") != "assistant":
-                    continue
-                message = obj.get("message") or {}
-                usage = message.get("usage") or {}
-                if not isinstance(usage, dict):
-                    continue
-                request_id = obj.get("requestId") or obj.get("uuid") or f"{Path(path).name}:{line_no}"
-                input_tokens = int(usage.get("input_tokens") or 0)
-                cached_tokens = int(usage.get("cache_read_input_tokens") or 0)
-                cache_write_tokens = int(usage.get("cache_creation_input_tokens") or 0)
-                output_tokens = int(usage.get("output_tokens") or 0)
-                total_tokens = input_tokens + cached_tokens + cache_write_tokens + output_tokens
-                generation = make_generation(
-                    "claude_code",
-                    session_id,
-                    request_id,
-                    timestamp=obj.get("timestamp"),
-                    model=message.get("model") or "Unknown Model",
-                    input_tokens=input_tokens,
-                    cached_tokens=cached_tokens,
-                    cache_write_tokens=cache_write_tokens,
-                    output_tokens=output_tokens,
-                    total_tokens=total_tokens,
-                    source_path=path,
-                )
-                old = usage_by_request.get(request_id)
-                if not old:
-                    order.append(request_id)
-                    usage_by_request[request_id] = generation
-                elif generation["total_tokens"] >= old["total_tokens"]:
-                    usage_by_request[request_id] = generation
-
-            generations = [usage_by_request[key] for key in order if usage_by_request.get(key)]
-            if not generations:
+            session = parse_claude_session(path)
+            if not session:
                 continue
-            session = make_session("claude_code", session_id, project, title, source_path=path, project_path=project_path)
-            session["generations"] = generations
-            sessions.append(finalize_session(session))
+            sessions.append(session)
             root_sessions += 1
-            root_chats += len(generations)
+            root_chats += len(session.get("generations", []))
         sources.append({"agent": "claude_code", "path": root, "status": "ok", "sessions": root_sessions, "chats": root_chats})
     return sessions, sources
 
@@ -653,6 +712,74 @@ def usage_delta(current, previous):
     return delta
 
 
+def parse_codex_session(path):
+    def build():
+        session_id = Path(path).stem
+        project_path = ""
+        project = "Unknown Project"
+        title = "Codex session"
+        model = "Unknown Model"
+        generations = []
+        previous_total = None
+        seen_last = set()
+
+        for line_no, obj in iter_jsonl(path):
+            if not isinstance(obj, dict):
+                continue
+            payload = obj.get("payload") if isinstance(obj.get("payload"), dict) else {}
+            ptype = payload.get("type")
+            if obj.get("type") == "session_meta":
+                session_id = str(payload.get("id") or session_id)
+                project_path = payload.get("cwd") or project_path
+                project = project_name_from_path(project_path, fallback=project)
+                model = payload.get("model") or model
+            elif obj.get("type") == "turn_context":
+                project_path = payload.get("cwd") or project_path
+                project = project_name_from_path(project_path, fallback=project)
+                model = payload.get("model") or model
+            elif obj.get("type") == "response_item" and payload.get("role") == "user" and title == "Codex session":
+                title = safe_title(extract_codex_content(payload.get("content")), fallback=title)
+
+            if ptype != "token_count":
+                continue
+            info = payload.get("info") if isinstance(payload.get("info"), dict) else {}
+            total_usage = codex_usage_from_raw(info.get("total_token_usage"))
+            last_usage = codex_usage_from_raw(info.get("last_token_usage"))
+            delta = None
+            if total_usage:
+                delta = usage_delta(total_usage, previous_total)
+                if delta:
+                    previous_total = total_usage
+                elif previous_total is None:
+                    previous_total = total_usage
+            elif last_usage:
+                fingerprint = tuple(last_usage.get(k, 0) for k in sorted(last_usage))
+                if fingerprint not in seen_last:
+                    seen_last.add(fingerprint)
+                    delta = last_usage
+            if not delta or int(delta.get("total_tokens") or 0) <= 0:
+                continue
+            generations.append(
+                make_generation(
+                    "codex",
+                    session_id,
+                    f"{Path(path).name}:{line_no}",
+                    timestamp=obj.get("timestamp"),
+                    model=model,
+                    source_path=path,
+                    **delta,
+                )
+            )
+
+        if not generations:
+            return None
+        session = make_session("codex", session_id, project, title, source_path=path, project_path=project_path)
+        session["generations"] = generations
+        return finalize_session(session)
+
+    return cached_file_result(path, build)
+
+
 def collect_codex(config):
     sessions = []
     sources = []
@@ -663,70 +790,12 @@ def collect_codex(config):
         for path in files:
             if f"{os.sep}.tmp{os.sep}" in path:
                 continue
-            session_id = Path(path).stem
-            project_path = ""
-            project = "Unknown Project"
-            title = "Codex session"
-            model = "Unknown Model"
-            generations = []
-            previous_total = None
-            seen_last = set()
-
-            for line_no, obj in iter_jsonl(path):
-                if not isinstance(obj, dict):
-                    continue
-                payload = obj.get("payload") if isinstance(obj.get("payload"), dict) else {}
-                ptype = payload.get("type")
-                if obj.get("type") == "session_meta":
-                    session_id = str(payload.get("id") or session_id)
-                    project_path = payload.get("cwd") or project_path
-                    project = project_name_from_path(project_path, fallback=project)
-                    model = payload.get("model") or model
-                elif obj.get("type") == "turn_context":
-                    project_path = payload.get("cwd") or project_path
-                    project = project_name_from_path(project_path, fallback=project)
-                    model = payload.get("model") or model
-                elif obj.get("type") == "response_item" and payload.get("role") == "user" and title == "Codex session":
-                    title = safe_title(extract_codex_content(payload.get("content")), fallback=title)
-
-                if ptype != "token_count":
-                    continue
-                info = payload.get("info") if isinstance(payload.get("info"), dict) else {}
-                total_usage = codex_usage_from_raw(info.get("total_token_usage"))
-                last_usage = codex_usage_from_raw(info.get("last_token_usage"))
-                delta = None
-                if total_usage:
-                    delta = usage_delta(total_usage, previous_total)
-                    if delta:
-                        previous_total = total_usage
-                    elif previous_total is None:
-                        previous_total = total_usage
-                elif last_usage:
-                    fingerprint = tuple(last_usage.get(k, 0) for k in sorted(last_usage))
-                    if fingerprint not in seen_last:
-                        seen_last.add(fingerprint)
-                        delta = last_usage
-                if not delta or int(delta.get("total_tokens") or 0) <= 0:
-                    continue
-                generations.append(
-                    make_generation(
-                        "codex",
-                        session_id,
-                        f"{Path(path).name}:{line_no}",
-                        timestamp=obj.get("timestamp"),
-                        model=model,
-                        source_path=path,
-                        **delta,
-                    )
-                )
-
-            if not generations:
+            session = parse_codex_session(path)
+            if not session:
                 continue
-            session = make_session("codex", session_id, project, title, source_path=path, project_path=project_path)
-            session["generations"] = generations
-            sessions.append(finalize_session(session))
+            sessions.append(session)
             root_sessions += 1
-            root_chats += len(generations)
+            root_chats += len(session.get("generations", []))
         sources.append({"agent": "codex", "path": root, "status": "ok", "sessions": root_sessions, "chats": root_chats})
     return sessions, sources
 
@@ -857,8 +926,9 @@ def is_agent_enabled(config, agent):
     return bool(agents.get(agent, True))
 
 
-def collect_all_usage(config=None, custom_antigravity_dir=None):
+def collect_all_usage(config=None, custom_antigravity_dir=None, only_agents=None):
     config = config or load_config()
+    selected_agents = normalize_agent_filter(only_agents)
     sessions = []
     sources = []
     collectors = [
@@ -868,6 +938,8 @@ def collect_all_usage(config=None, custom_antigravity_dir=None):
         ("cline", collect_cline, {}),
     ]
     for agent, collector, kwargs in collectors:
+        if selected_agents is not None and agent not in selected_agents:
+            continue
         if not is_agent_enabled(config, agent):
             sources.append({"agent": agent, "path": "", "status": "disabled", "sessions": 0, "chats": 0})
             continue
@@ -1050,6 +1122,28 @@ def compact_summary(data):
     )
 
 
+def compact_summary_payload(data):
+    summary = data.get("summary", {})
+    rolling_usage = summary.get("rolling_usage", {})
+    last = summary.get("last_chat") or {}
+    session = summary.get("current_session") or {}
+    agent_id = session.get("agent") or last.get("agent")
+    agent_usage = summary.get("rolling_usage_by_agent", {}).get(agent_id, {}) if agent_id else {}
+    five_hour = agent_usage.get("five_hour") or rolling_usage.get("five_hour", {})
+    twenty_four_hour = agent_usage.get("twenty_four_hour") or rolling_usage.get("twenty_four_hour", {})
+    payload = {
+        "line": compact_summary(data),
+        "agent": session.get("agent_name") or last.get("agent_name") or AGENT_NAMES.get(agent_id, "Agent"),
+        "agent_id": agent_id or "",
+        "session_active_tokens": int(session.get("active_tokens", session.get("total_tokens", 0)) or 0),
+        "last_active_tokens": int(last.get("active_tokens", last.get("total_tokens", 0)) or 0),
+        "rolling_5h_active_tokens": int(five_hour.get("used", 0) or 0),
+        "rolling_24h_active_tokens": int(twenty_four_hour.get("used", 0) or 0),
+        "estimated": True,
+    }
+    return payload
+
+
 def human_summary(data, compact=False):
     if compact:
         return compact_summary(data)
@@ -1108,11 +1202,14 @@ def human_summary(data, compact=False):
 def tokenlens_rule_section(cli):
     return (
         "\n\n# TokenLens\n"
-        "At the end of every assistant turn, run exactly once:\n"
-        f"python \"{cli}\" --compact\n"
-        "Append only the returned one-line TokenLens summary. It reports active tokens for the current/latest session "
-        "(`session`), last model call/chat (`last`), and estimated current-agent rolling 5-hour and 24-hour usage. "
-        "Active tokens exclude cached reads so repeated context cache does not look like fresh burn. "
+        "At the end of an assistant turn, append one compact TokenLens footer only when it can be retrieved without "
+        "interrupting the user.\n"
+        "Preferred: call the `get_token_summary` MCP tool once and append its exact one-line result.\n"
+        f"Fallback only when shell execution is already permitted: python \"{cli}\" --compact\n"
+        "Never run plain `python cli.py` for the footer. Never ask for shell approval every turn just to run TokenLens. "
+        "If MCP is unavailable and shell execution would require approval, skip the footer and suggest one-time MCP setup. "
+        "The footer reports active tokens for the current/latest session (`session`), last model call/chat (`last`), "
+        "and estimated current-agent rolling 5-hour and 24-hour usage. Active tokens exclude cached reads. "
         "Do not expand it unless asked. The dashboard may be opened for setup or human inspection, "
         "but never use dashboard output for routine turn summaries.\n"
     )
@@ -1172,12 +1269,83 @@ def install_workspace_rules(workspace_dir=None, cli_path=None):
     return touched
 
 
+def install_antigravity_mcp(config_path=None, server_name="tokenlens"):
+    repo_dir = Path(__file__).resolve().parent
+    server_path = repo_dir / "mcp_server.py"
+    if config_path:
+        config = Path(config_path).expanduser().resolve()
+    else:
+        config = Path.home() / ".gemini" / "antigravity-ide" / "mcp_config.json"
+    config.parent.mkdir(parents=True, exist_ok=True)
+
+    data = {}
+    if config.exists():
+        try:
+            data = json.loads(config.read_text(encoding="utf-8"))
+        except Exception:
+            data = {}
+    if not isinstance(data, dict):
+        data = {}
+    servers = data.setdefault("mcpServers", {})
+    entry = {
+        "command": sys.executable,
+        "args": [str(server_path), "--agent", "antigravity"],
+        "cwd": str(repo_dir),
+    }
+    changed = servers.get(server_name) != entry
+    servers[server_name] = entry
+    config.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+    metadata_dir = config.parent / "mcp" / server_name
+    metadata_dir.mkdir(parents=True, exist_ok=True)
+    tool_path = metadata_dir / "get_token_summary.json"
+    tool_spec = {
+        "name": "get_token_summary",
+        "description": "Return one compact TokenLens footer. Use format=json only for programmatic parsing.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "format": {
+                    "type": "string",
+                    "description": "Output format: text or json.",
+                    "default": "text",
+                },
+                "agent": {
+                    "type": "string",
+                    "description": "Optional agent filter.",
+                    "default": "antigravity",
+                }
+            },
+        },
+    }
+    tool_text = json.dumps(tool_spec, separators=(",", ":"))
+    if not tool_path.exists() or tool_path.read_text(encoding="utf-8", errors="ignore") != tool_text:
+        tool_path.write_text(tool_text, encoding="utf-8")
+        changed = True
+    instructions_path = metadata_dir / "instructions.md"
+    instructions = "Local TokenLens usage meter. Call get_token_summary once for a compact Antigravity footer; do not run shell commands for routine summaries.\n"
+    if not instructions_path.exists() or instructions_path.read_text(encoding="utf-8", errors="ignore") != instructions:
+        instructions_path.write_text(instructions, encoding="utf-8")
+        changed = True
+
+    return {
+        "changed": changed,
+        "config_path": str(config),
+        "server_name": server_name,
+        "metadata_dir": str(metadata_dir),
+    }
+
+
 def cli_arg_parser():
     parser = argparse.ArgumentParser(description="Summarize local AI agent token usage.")
     parser.add_argument("path", nargs="?", help="Optional Antigravity data directory.")
     parser.add_argument("--compact", action="store_true", help="Print a one-line agent-safe summary.")
+    parser.add_argument("--verbose", action="store_true", help="Print the multi-line human summary.")
     parser.add_argument("--json", action="store_true", help="Print normalized usage JSON.")
+    parser.add_argument("--agent", choices=("all",) + AGENT_CHOICES, default="all", help="Limit collection to one agent.")
     parser.add_argument("--install-rules", action="store_true", help="Install token status guidance into workspace rules.")
+    parser.add_argument("--install-antigravity-mcp", action="store_true", help="Register TokenLens as an Antigravity MCP server.")
     parser.add_argument("--workspace", help="Workspace directory for --install-rules. Defaults to the current directory.")
+    parser.add_argument("--mcp-config", help="Path to Antigravity mcp_config.json.")
     parser.add_argument("--config", help="Path to config.json.")
     return parser
