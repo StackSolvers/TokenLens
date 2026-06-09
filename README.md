@@ -8,11 +8,27 @@ TokenLens is a local, privacy-first dashboard and MCP server for understanding h
 
 Produced by Stack Solvers for IT Solutions.
 
-Use it when you want a clear answer to:
+## Quick Start
 
-- How many active tokens did the current agent session use?
-- Which projects, chats, and models are driving usage?
-- What happened in the last 5 hours, 24 hours, 7 days, and 30 days?
+### AI Agent Prompt
+
+Copy this into your AI coding agent:
+
+```text
+Set up TokenLens for this workspace: clone https://github.com/StackSolvers/TokenLens.git if needed. Run `python <TokenLens>/cli.py --install-rules --workspace . --compact`. If this agent supports MCP, register `python <TokenLens>/mcp_server.py --agent current` as `tokenlens` (Antigravity shortcut: `python <TokenLens>/cli.py --install-antigravity-mcp`). After each turn, prefer `get_token_summary` and append only its one-line result. Do not ask for shell approval every turn just to run TokenLens. Keep it local; add no telemetry.
+```
+
+### Manual Setup
+
+```powershell
+git clone https://github.com/StackSolvers/TokenLens.git
+cd TokenLens
+python cli.py --compact
+python cli.py --install-antigravity-mcp
+python server.py
+```
+
+The server opens the dashboard locally by default. It starts at `http://127.0.0.1:8080` and falls back to the next free port if needed.
 
 ## Features
 
@@ -40,28 +56,6 @@ If a local task is detected but does not expose token fields, TokenLens reports 
 - Node.js is optional and only used for `node --check app.js` during verification.
 
 No Python package installation is required.
-
-## Quick Start
-
-### AI Agent Prompt
-
-Copy this into your AI coding agent:
-
-```text
-Set up TokenLens for this workspace: clone https://github.com/StackSolvers/TokenLens.git if needed. Run `python <TokenLens>/cli.py --install-rules --workspace . --compact`. If this agent supports MCP, register `python <TokenLens>/mcp_server.py --agent current` as `tokenlens` (Antigravity shortcut: `python <TokenLens>/cli.py --install-antigravity-mcp`). After each turn, prefer `get_token_summary` and append only its one-line result. Do not ask for shell approval every turn just to run TokenLens. Keep it local; add no telemetry.
-```
-
-### Manual Setup
-
-```powershell
-git clone https://github.com/StackSolvers/TokenLens.git
-cd TokenLens
-python cli.py --compact
-python cli.py --install-antigravity-mcp
-python server.py
-```
-
-The server opens the dashboard locally by default. It starts at `http://127.0.0.1:8080` and falls back to the next free port if needed.
 
 ## Dashboard
 
