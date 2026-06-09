@@ -15,7 +15,7 @@ Produced by Stack Solvers for IT Solutions.
 Copy this into your AI coding agent:
 
 ```text
-Set up TokenLens for this workspace: clone https://github.com/StackSolvers/TokenLens.git if needed. Run `python <TokenLens>/cli.py --install-rules --workspace . --compact`. If this agent supports MCP, register `python <TokenLens>/mcp_server.py --agent current` as `tokenlens` (Antigravity shortcut: `python <TokenLens>/cli.py --install-antigravity-mcp`). After each turn, prefer `get_token_summary` and append only its one-line result. Do not ask for shell approval every turn just to run TokenLens. Keep it local; add no telemetry.
+Set up TokenLens for this workspace: clone https://github.com/StackSolvers/TokenLens.git if needed. Run `python <TokenLens>/cli.py --install-rules --workspace . --compact`. If MCP is available, register TokenLens as a stdio server named `tokenlens` using `python <TokenLens>/mcp_server.py --agent current`; use `python <TokenLens>/cli.py --print-mcp-snippet json` or `--print-mcp-snippet toml` if you need config text. After each turn, call `get_token_summary` once and append only its one-line result. If MCP is unavailable and shell execution would require approval, skip the footer instead of asking every turn. Keep it local; add no telemetry.
 ```
 
 ### Manual Setup
