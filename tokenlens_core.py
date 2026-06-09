@@ -38,7 +38,22 @@ DEFAULT_CONFIG = {
 }
 
 AGENT_CHOICES = tuple(AGENT_NAMES.keys())
+AGENT_FILTER_CHOICES = ("all", "current") + AGENT_CHOICES
 _SESSION_CACHE = {}
+
+
+def detect_current_agent(env=None):
+    env = env or os.environ
+    origin = str(env.get("CODEX_INTERNAL_ORIGINATOR_OVERRIDE") or "").lower()
+    if env.get("CODEX_THREAD_ID") or "codex" in origin:
+        return "codex"
+    if any(env.get(key) for key in ("ANTIGRAVITY_HOME", "ANTIGRAVITY_SESSION_ID", "ANTIGRAVITY_IDE")):
+        return "antigravity"
+    if any(env.get(key) for key in ("CLAUDE_CODE_SESSION_ID", "CLAUDECODE", "CLAUDE_CODE")):
+        return "claude_code"
+    if any(env.get(key) for key in ("CLINE_TASK_ID", "CLINE_WORKSPACE")):
+        return "cline"
+    return None
 
 
 def normalize_agent_filter(only_agents=None):
@@ -46,7 +61,14 @@ def normalize_agent_filter(only_agents=None):
         return None
     if isinstance(only_agents, str):
         only_agents = [only_agents]
-    selected = {agent for agent in only_agents if agent in AGENT_NAMES}
+    selected = set()
+    for agent in only_agents:
+        if agent == "current":
+            current = detect_current_agent()
+            if current:
+                selected.add(current)
+        elif agent in AGENT_NAMES:
+            selected.add(agent)
     return selected or None
 
 
@@ -1205,7 +1227,7 @@ def tokenlens_rule_section(cli):
         "At the end of an assistant turn, append one compact TokenLens footer only when it can be retrieved without "
         "interrupting the user.\n"
         "Preferred: call the `get_token_summary` MCP tool once and append its exact one-line result.\n"
-        f"Fallback only when shell execution is already permitted: python \"{cli}\" --compact\n"
+        f"Fallback only when shell execution is already permitted: python \"{cli}\" --compact --agent current\n"
         "Never run plain `python cli.py` for the footer. Never ask for shell approval every turn just to run TokenLens. "
         "If MCP is unavailable and shell execution would require approval, skip the footer and suggest one-time MCP setup. "
         "The footer reports active tokens for the current/latest session (`session`), last model call/chat (`last`), "
@@ -1269,37 +1291,18 @@ def install_workspace_rules(workspace_dir=None, cli_path=None):
     return touched
 
 
-def install_antigravity_mcp(config_path=None, server_name="tokenlens"):
+def mcp_server_entry(default_agent="current"):
     repo_dir = Path(__file__).resolve().parent
     server_path = repo_dir / "mcp_server.py"
-    if config_path:
-        config = Path(config_path).expanduser().resolve()
-    else:
-        config = Path.home() / ".gemini" / "antigravity-ide" / "mcp_config.json"
-    config.parent.mkdir(parents=True, exist_ok=True)
-
-    data = {}
-    if config.exists():
-        try:
-            data = json.loads(config.read_text(encoding="utf-8"))
-        except Exception:
-            data = {}
-    if not isinstance(data, dict):
-        data = {}
-    servers = data.setdefault("mcpServers", {})
-    entry = {
+    return {
         "command": sys.executable,
-        "args": [str(server_path), "--agent", "antigravity"],
+        "args": [str(server_path), "--agent", default_agent],
         "cwd": str(repo_dir),
     }
-    changed = servers.get(server_name) != entry
-    servers[server_name] = entry
-    config.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
-    metadata_dir = config.parent / "mcp" / server_name
-    metadata_dir.mkdir(parents=True, exist_ok=True)
-    tool_path = metadata_dir / "get_token_summary.json"
-    tool_spec = {
+
+def mcp_tool_spec(default_agent="current"):
+    return {
         "name": "get_token_summary",
         "description": "Return one compact TokenLens footer. Use format=json only for programmatic parsing.",
         "parameters": {
@@ -1313,17 +1316,48 @@ def install_antigravity_mcp(config_path=None, server_name="tokenlens"):
                 "agent": {
                     "type": "string",
                     "description": "Optional agent filter.",
-                    "default": "antigravity",
+                    "default": default_agent,
                 }
             },
         },
     }
-    tool_text = json.dumps(tool_spec, separators=(",", ":"))
+
+
+def mcp_instructions(default_agent="current"):
+    target = "current-agent" if default_agent == "current" else f"{AGENT_NAMES.get(default_agent, default_agent)}"
+    return f"Local TokenLens usage meter. Call get_token_summary once for a compact {target} footer; do not run shell commands for routine summaries.\n"
+
+
+def install_json_mcp(config_path, server_name="tokenlens", default_agent="current"):
+    if config_path:
+        config = Path(config_path).expanduser().resolve()
+    else:
+        raise ValueError("--mcp-config is required for generic JSON MCP install")
+    config.parent.mkdir(parents=True, exist_ok=True)
+
+    data = {}
+    if config.exists():
+        try:
+            data = json.loads(config.read_text(encoding="utf-8"))
+        except Exception:
+            data = {}
+    if not isinstance(data, dict):
+        data = {}
+    servers = data.setdefault("mcpServers", {})
+    entry = mcp_server_entry(default_agent=default_agent)
+    changed = servers.get(server_name) != entry
+    servers[server_name] = entry
+    config.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+    metadata_dir = config.parent / "mcp" / server_name
+    metadata_dir.mkdir(parents=True, exist_ok=True)
+    tool_path = metadata_dir / "get_token_summary.json"
+    tool_text = json.dumps(mcp_tool_spec(default_agent=default_agent), separators=(",", ":"))
     if not tool_path.exists() or tool_path.read_text(encoding="utf-8", errors="ignore") != tool_text:
         tool_path.write_text(tool_text, encoding="utf-8")
         changed = True
     instructions_path = metadata_dir / "instructions.md"
-    instructions = "Local TokenLens usage meter. Call get_token_summary once for a compact Antigravity footer; do not run shell commands for routine summaries.\n"
+    instructions = mcp_instructions(default_agent=default_agent)
     if not instructions_path.exists() or instructions_path.read_text(encoding="utf-8", errors="ignore") != instructions:
         instructions_path.write_text(instructions, encoding="utf-8")
         changed = True
@@ -1336,16 +1370,40 @@ def install_antigravity_mcp(config_path=None, server_name="tokenlens"):
     }
 
 
+def install_antigravity_mcp(config_path=None, server_name="tokenlens", default_agent="antigravity"):
+    config = Path(config_path).expanduser().resolve() if config_path else Path.home() / ".gemini" / "antigravity-ide" / "mcp_config.json"
+    return install_json_mcp(config_path=config, server_name=server_name, default_agent=default_agent)
+
+
+def mcp_json_snippet(server_name="tokenlens", default_agent="current"):
+    return json.dumps({"mcpServers": {server_name: mcp_server_entry(default_agent=default_agent)}}, indent=2)
+
+
+def mcp_toml_snippet(server_name="tokenlens", default_agent="current"):
+    entry = mcp_server_entry(default_agent=default_agent)
+    args = ", ".join(json.dumps(str(arg)) for arg in entry["args"])
+    return (
+        f"[mcp_servers.{server_name}]\n"
+        f"command = {json.dumps(entry['command'])}\n"
+        f"args = [{args}]\n"
+        f"cwd = {json.dumps(entry['cwd'])}\n"
+    )
+
+
 def cli_arg_parser():
     parser = argparse.ArgumentParser(description="Summarize local AI agent token usage.")
     parser.add_argument("path", nargs="?", help="Optional Antigravity data directory.")
     parser.add_argument("--compact", action="store_true", help="Print a one-line agent-safe summary.")
     parser.add_argument("--verbose", action="store_true", help="Print the multi-line human summary.")
     parser.add_argument("--json", action="store_true", help="Print normalized usage JSON.")
-    parser.add_argument("--agent", choices=("all",) + AGENT_CHOICES, default="all", help="Limit collection to one agent.")
+    parser.add_argument("--agent", choices=AGENT_FILTER_CHOICES, default="all", help="Limit collection to one agent.")
     parser.add_argument("--install-rules", action="store_true", help="Install token status guidance into workspace rules.")
+    parser.add_argument("--install-mcp-json", action="store_true", help="Merge TokenLens into a JSON MCP config that uses mcpServers.")
     parser.add_argument("--install-antigravity-mcp", action="store_true", help="Register TokenLens as an Antigravity MCP server.")
+    parser.add_argument("--print-mcp-snippet", choices=("json", "toml"), help="Print a TokenLens MCP config snippet.")
     parser.add_argument("--workspace", help="Workspace directory for --install-rules. Defaults to the current directory.")
-    parser.add_argument("--mcp-config", help="Path to Antigravity mcp_config.json.")
+    parser.add_argument("--mcp-config", help="Path to a JSON MCP config file.")
+    parser.add_argument("--mcp-agent", choices=AGENT_FILTER_CHOICES, default="current", help="Default agent filter for MCP server.")
+    parser.add_argument("--mcp-server-name", default="tokenlens", help="MCP server name to install or print.")
     parser.add_argument("--config", help="Path to config.json.")
     return parser

@@ -17,7 +17,7 @@ get_token_summary
 Shell fallback only when shell execution is already permitted:
 
 ```powershell
-python cli.py --compact
+python cli.py --compact --agent current
 ```
 
 Append only the returned one-line footer. Do not explain it unless the user asks. Never run plain `python cli.py` for the footer, and never ask for shell approval every turn just to run TokenLens.

@@ -3,9 +3,9 @@ import argparse
 import json
 import os
 
-from tokenlens_core import AGENT_CHOICES, collect_all_usage, compact_summary, compact_summary_payload, load_config
+from tokenlens_core import AGENT_FILTER_CHOICES, collect_all_usage, compact_summary, compact_summary_payload, load_config
 
-DEFAULT_AGENT = "all"
+DEFAULT_AGENT = "current"
 
 def log(msg):
     if os.environ.get("TOKENLENS_MCP_DEBUG") != "1":
@@ -48,8 +48,8 @@ def handle_list_tools(request_id):
                             },
                             "agent": {
                                 "type": "string",
-                                "description": "Optional agent filter. The Antigravity installer defaults this server to antigravity.",
-                                "enum": ["all"] + list(AGENT_CHOICES),
+                                "description": "Optional agent filter. Use current for auto-detect, or a specific supported agent id.",
+                                "enum": list(AGENT_FILTER_CHOICES),
                                 "default": DEFAULT_AGENT
                             }
                         }
@@ -66,7 +66,7 @@ def agent_filter(arguments):
         requested = str(arguments.get("agent"))
     if requested == "all":
         return None
-    if requested in AGENT_CHOICES:
+    if requested in AGENT_FILTER_CHOICES:
         return requested
     return None
 
@@ -108,7 +108,7 @@ def handle_call_tool(request_id, name, arguments):
 def main(argv=None):
     global DEFAULT_AGENT
     parser = argparse.ArgumentParser(description="TokenLens MCP server.")
-    parser.add_argument("--agent", choices=("all",) + AGENT_CHOICES, default="all", help="Default agent filter for get_token_summary.")
+    parser.add_argument("--agent", choices=AGENT_FILTER_CHOICES, default="current", help="Default agent filter for get_token_summary.")
     args = parser.parse_args(argv)
     DEFAULT_AGENT = args.agent
 

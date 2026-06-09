@@ -10,11 +10,15 @@ from tokenlens_core import (
     compact_summary,
     compact_summary_payload,
     deep_merge,
+    detect_current_agent,
     finalize_session,
     install_antigravity_mcp,
+    install_json_mcp,
     install_workspace_rules,
     make_generation,
     make_session,
+    mcp_json_snippet,
+    mcp_toml_snippet,
     summarize_usage,
 )
 
@@ -201,6 +205,10 @@ class CollectorTests(unittest.TestCase):
             self.assertEqual(codex_only["summary"]["sessions"], 1)
             self.assertEqual(codex_only["summary"]["current_session"]["agent"], "codex")
 
+            with EnvPatch(HOME=str(root), USERPROFILE=str(root), APPDATA=str(appdata), CODEX_HOME=str(root / ".codex"), CODEX_THREAD_ID="thread-a"):
+                current_only = collect_all_usage(config, only_agents="current")
+            self.assertEqual(current_only["summary"]["current_session"]["agent"], "codex")
+
     def test_install_workspace_rules_creates_common_agent_rule_files(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -229,6 +237,20 @@ class CollectorTests(unittest.TestCase):
             self.assertTrue(Path(result["metadata_dir"], "get_token_summary.json").exists())
             instructions = Path(result["metadata_dir"], "instructions.md").read_text(encoding="utf-8")
             self.assertIn("do not run shell commands", instructions)
+
+    def test_generic_mcp_install_and_snippets_support_current_agent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config_path = root / "mcp_config.json"
+            result = install_json_mcp(config_path=config_path, default_agent="current")
+
+            self.assertTrue(result["changed"])
+            data = json.loads(config_path.read_text(encoding="utf-8"))
+            entry = data["mcpServers"]["tokenlens"]
+            self.assertEqual(entry["args"][-2:], ["--agent", "current"])
+            self.assertIn('"mcpServers"', mcp_json_snippet(default_agent="codex"))
+            self.assertIn("[mcp_servers.tokenlens]", mcp_toml_snippet(default_agent="codex"))
+            self.assertEqual(detect_current_agent({"CODEX_THREAD_ID": "thread-a"}), "codex")
 
     def test_active_tokens_exclude_cached_reads_for_any_agent(self):
         session = make_session("antigravity", "ag-a", "Project", "Title")

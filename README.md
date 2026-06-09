@@ -48,7 +48,7 @@ No Python package installation is required.
 Copy this into your AI coding agent:
 
 ```text
-Set up TokenLens for this workspace: clone https://github.com/StackSolvers/TokenLens.git if needed. Run `python <TokenLens>/cli.py --install-antigravity-mcp`, then `python <TokenLens>/cli.py --install-rules --workspace . --compact`. After each turn, prefer the `get_token_summary` MCP tool and append only its one-line result. Do not ask for shell approval every turn just to run TokenLens. Keep it local; add no telemetry.
+Set up TokenLens for this workspace: clone https://github.com/StackSolvers/TokenLens.git if needed. Run `python <TokenLens>/cli.py --install-rules --workspace . --compact`. If this agent supports MCP, register `python <TokenLens>/mcp_server.py --agent current` as `tokenlens` (Antigravity shortcut: `python <TokenLens>/cli.py --install-antigravity-mcp`). After each turn, prefer `get_token_summary` and append only its one-line result. Do not ask for shell approval every turn just to run TokenLens. Keep it local; add no telemetry.
 ```
 
 ### Manual Setup
@@ -94,6 +94,7 @@ python cli.py --verbose
 python cli.py --json
 python cli.py --compact --json
 python cli.py --compact --agent antigravity
+python cli.py --compact --agent current
 ```
 
 Example compact output:
@@ -102,11 +103,30 @@ Example compact output:
 TokenLens | Codex | active | session 2.5M | last 4.8k | 5h 418.1k | 24h 2.5M | estimated
 ```
 
-`python cli.py` defaults to the compact one-line output. Use `--verbose` for the multi-line human summary. Use `--compact --json` for a tiny structured payload suitable for agents. Use `--agent antigravity`, `--agent codex`, `--agent claude_code`, or `--agent cline` to limit collection to one agent.
+`python cli.py` defaults to the compact one-line output. Use `--verbose` for the multi-line human summary. Use `--compact --json` for a tiny structured payload suitable for agents. Use `--agent current` for auto-detection, or `--agent antigravity`, `--agent codex`, `--agent claude_code`, or `--agent cline` to limit collection to one agent.
 
 ## MCP Tool
 
-For Antigravity, install the MCP server once:
+For any MCP client, register TokenLens as a stdio server:
+
+```powershell
+python cli.py --print-mcp-snippet json
+python cli.py --print-mcp-snippet toml
+```
+
+The server command inside the snippet is:
+
+```powershell
+python mcp_server.py --agent current
+```
+
+For JSON MCP configs that use `mcpServers`, TokenLens can merge the entry when you pass the config path:
+
+```powershell
+python cli.py --install-mcp-json --mcp-config C:\path\to\mcp_config.json --mcp-agent current
+```
+
+For Antigravity, there is also a one-command shortcut:
 
 ```powershell
 python cli.py --install-antigravity-mcp
@@ -118,7 +138,20 @@ Restart Antigravity after installing or updating MCP configuration. Then call:
 get_token_summary
 ```
 
-The installed Antigravity MCP server defaults to `--agent antigravity`, so routine footers do not scan unrelated Codex, Claude Code, or Cline history. The tool returns one compact line, uses in-process file caching while the MCP server is alive, and does not trigger other tools. It also accepts `{"format":"json"}` for minimal structured output or `{"agent":"all"}` when you explicitly want a cross-agent summary.
+The generic MCP snippet defaults to `--agent current`. The Antigravity shortcut defaults to `--agent antigravity`. The tool returns one compact line, uses in-process file caching while the MCP server is alive, and does not trigger other tools. It accepts `{"format":"json"}` for minimal structured output, `{"agent":"codex"}` or another supported agent id for a specific agent, or `{"agent":"all"}` when you explicitly want a cross-agent summary.
+
+## Agent Coverage
+
+TokenLens currently has built-in collectors for local usage data exposed by:
+
+| Agent | Footer filter | Data source |
+| --- | --- | --- |
+| Antigravity | `--agent antigravity` | Local Antigravity conversation SQLite/protobuf files |
+| Codex | `--agent codex` | Local Codex session JSONL files |
+| Claude Code | `--agent claude_code` | Local Claude Code project JSONL files |
+| Cline/Roo/Kilo-style tasks | `--agent cline` | Local VS Code/Cursor task records when token fields are present |
+
+Other agents can use TokenLens through the same MCP server if they can call MCP tools. TokenLens can only calculate usage for agents that expose local token usage logs or databases; it does not call provider APIs or estimate hidden usage from message text. New agents should be added as explicit collectors so their numbers stay auditable.
 
 ## Use With AI Agents
 
@@ -128,7 +161,7 @@ TokenLens is designed to give agents a tiny, useful footer without flooding the 
 python cli.py --install-rules --workspace . --compact
 ```
 
-Run the command from the project you want the agent to work in, or pass an absolute path after `--workspace`. This adds a short TokenLens instruction to common agent rule files in that workspace, including `.airules`, `.cursorrules`, `.clinerules`, `AGENTS.md`, `CLAUDE.md`, and `GEMINI.md`. The instruction tells the agent to prefer the MCP tool, avoid repeated shell approval prompts, and append only the one-line result:
+Run the command from the project you want the agent to work in, or pass an absolute path after `--workspace`. This adds a short TokenLens instruction to common agent rule files in that workspace, including `.airules`, `.cursorrules`, `.clinerules`, `AGENTS.md`, `CLAUDE.md`, and `GEMINI.md`. The instruction tells the agent to prefer the MCP tool, use `--agent current` for shell fallback, avoid repeated shell approval prompts, and append only the one-line result:
 
 ```text
 TokenLens | Codex | active | session 2.5M | last 4.8k | 5h 418.1k | 24h 2.5M | estimated
